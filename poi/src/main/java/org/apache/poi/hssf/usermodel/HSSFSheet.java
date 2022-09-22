@@ -2126,16 +2126,10 @@ public final class HSSFSheet implements Sheet {
      * it there is one.
      */
     public EscherAggregate getDrawingEscherAggregate() {
-        _book.findDrawingGroup();
-
-        // If there's now no drawing manager, then there's
-        //  no drawing escher records on the workbook
-        if (_book.getDrawingManager() == null) {
-            return null;
-        }
+        DrawingManager2 drawingManager = _book.getDrawingManager();
 
         int found = _sheet.aggregateDrawingRecords(
-                _book.getDrawingManager(), false
+            drawingManager, false
         );
         if (found == -1) {
             // Workbook has drawing stuff, but this sheet doesn't
@@ -2175,15 +2169,7 @@ public final class HSSFSheet implements Sheet {
         if (_patriarch != null) {
             return _patriarch;
         }
-        DrawingManager2 dm = _book.findDrawingGroup();
-        if (null == dm) {
-            if (!createIfMissing) {
-                return null;
-            } else {
-                _book.createDrawingGroup();
-                dm = _book.getDrawingManager();
-            }
-        }
+        DrawingManager2 dm = _book.getDrawingManager();
         EscherAggregate agg = (EscherAggregate) _sheet.findFirstRecordBySid(EscherAggregate.sid);
         if (null == agg) {
             int pos = _sheet.aggregateDrawingRecords(dm, false);
