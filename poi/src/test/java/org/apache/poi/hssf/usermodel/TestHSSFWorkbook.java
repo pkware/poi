@@ -761,7 +761,7 @@ public final class TestHSSFWorkbook extends BaseTestWorkbook {
     void clonePictures() throws IOException {
         HSSFWorkbook wb = openSampleWorkbook("SimpleWithImages.xls");
         InternalWorkbook iwb = wb.getWorkbook();
-        iwb.findDrawingGroup();
+        iwb.getDrawingManager();
 
         for(int pictureIndex=1; pictureIndex <= 4; pictureIndex++){
             EscherBSERecord bse = iwb.getBSERecord(pictureIndex);

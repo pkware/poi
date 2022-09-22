@@ -124,6 +124,15 @@ public class EscherBlipRecord extends EscherRecord {
         field_pictureData = IOUtils.safelyClone(pictureData, offset, length, MAX_RECORD_LENGTH);
     }
 
+    /**
+     * Sets all UIDs for the record.
+     *
+     * @param uid MD4 message digest of the image data.
+     */
+    public void setUIDs(byte[] uid) {
+        // No-op - not abstract so as not to break app developers who have subclassed.
+    }
+
     @Override
     public Map<String, Supplier<?>> getGenericProperties() {
         return GenericRecordUtil.getGenericProperties(
