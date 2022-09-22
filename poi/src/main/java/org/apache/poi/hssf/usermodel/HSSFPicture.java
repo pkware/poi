@@ -22,7 +22,6 @@ import java.awt.Dimension;
 import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream;
 import org.apache.poi.ddf.DefaultEscherRecordFactory;
 import org.apache.poi.ddf.EscherBSERecord;
-import org.apache.poi.ddf.EscherBlipRecord;
 import org.apache.poi.ddf.EscherClientDataRecord;
 import org.apache.poi.ddf.EscherComplexProperty;
 import org.apache.poi.ddf.EscherContainerRecord;
@@ -218,8 +217,7 @@ public class HSSFPicture extends HSSFSimpleShape implements Picture {
 
         InternalWorkbook iwb = patriarch.getSheet().getWorkbook().getWorkbook();
         EscherBSERecord bse = iwb.getBSERecord(picIdx);
-        EscherBlipRecord blipRecord = bse.getBlipRecord();
-        return new HSSFPictureData(blipRecord);
+        return new HSSFPictureData(bse);
     }
 
     @Override

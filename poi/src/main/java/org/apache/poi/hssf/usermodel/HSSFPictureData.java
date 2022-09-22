@@ -18,11 +18,20 @@
 
 package org.apache.poi.hssf.usermodel;
 
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.poi.ddf.EscherBSERecord;
 import org.apache.poi.ddf.EscherBlipRecord;
 import org.apache.poi.ddf.EscherRecordTypes;
+import org.apache.poi.hssf.model.DrawingManager2;
+import org.apache.poi.poifs.filesystem.FileMagic;
 import org.apache.poi.sl.image.ImageHeaderPNG;
 import org.apache.poi.ss.usermodel.PictureData;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.util.IOUtils;
+import org.apache.poi.util.Internal;
+import org.apache.poi.util.Removal;
+
+import java.util.Objects;
 
 /**
  * Represents binary data stored in the file.  Eg. A GIF, JPEG etc...
@@ -38,6 +47,12 @@ public class HSSFPictureData implements PictureData
     public static final short MSOBI_DIB   = 0x7A80;
     // Mask of the bits in the options used to store the image format.
     public static final short FORMAT_MASK = (short) 0xFFF0;
+    private static final int MAX_IMAGE_LENGTH = 50_000_000;
+
+    /**
+     * Record referencing this picture. Should be attached to the spreadsheet that this picture is linked to.
+     */
+    private final EscherBSERecord bse;
 
     /**
      * Underlying escher blip record containing the bitmap data.
@@ -48,10 +63,24 @@ public class HSSFPictureData implements PictureData
      * Constructs a picture object.
      *
      * @param blip the underlying blip record containing the bitmap data.
+     * @deprecated Instances created using this function may not have changes saved to the underlying workbook. Obtain
+     * new instances via {@link DrawingManager2#allocatePicture(int)}.
      */
-    public HSSFPictureData( EscherBlipRecord blip )
-    {
-        this.blip = blip;
+    @Deprecated
+    @Removal(version = "5.4")
+    public HSSFPictureData(EscherBlipRecord blip) {
+        this(newStubBseRecord(blip));
+    }
+
+    /**
+     * Creates a new instance.
+     *
+     * @param bse Record referencing this picture. Should be attached to the spreadsheet that this picture is linked to.
+     */
+    @Internal
+    public HSSFPictureData(EscherBSERecord bse) {
+        this.bse = Objects.requireNonNull(bse);
+        blip = Objects.requireNonNull(bse.getBlipRecord());
     }
 
     /* (non-Javadoc)
@@ -60,6 +89,31 @@ public class HSSFPictureData implements PictureData
     @Override
     public byte[] getData() {
         return new ImageHeaderPNG(blip.getPicturedata()).extractPNG();
+    }
+
+    /**
+     * Sets the binary picture data
+     * <p>
+     * The format of the data must match the original format of this picture. Failure to match the picture data may
+     * result in data loss.
+     *
+     * @param data Picture data
+     */
+    public void setData(byte[] data) {
+        byte[] newUid = DigestUtils.md5(data);
+        EscherBlipRecord blip = bse.getBlipRecord();
+        bse.setUid(newUid);
+        blip.setUIDs(newUid);
+
+        if (blip.getRecordId() == EscherRecordTypes.BLIP_WMF.typeID) {
+            // Remove first 22 bytes if file starts with the WMF placeable header
+            if (FileMagic.valueOf(data) == FileMagic.WMF) {
+                data = IOUtils.safelyClone(data, 22, data.length - 22, MAX_IMAGE_LENGTH);
+            }
+        }
+
+        blip.setPictureData(data);
+        bse.setSize(blip.getRecordSize());
     }
 
     /**
@@ -148,5 +202,11 @@ public class HSSFPictureData implements PictureData
             default:
                 return 0;
         }
+    }
+
+    private static EscherBSERecord newStubBseRecord(EscherBlipRecord blip) {
+        EscherBSERecord record = new EscherBSERecord();
+        record.setBlipRecord(blip);
+        return record;
     }
 }

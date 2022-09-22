@@ -73,7 +73,7 @@ public final class EscherMetafileBlip extends EscherBlipRecord {
     private int field_4_ptSize_h;
     private int field_5_cbSave;
     private byte field_6_fCompression;
-    private byte field_7_fFilter;
+    private byte field_7_fFilter = (byte) 0xFE;
 
     private byte[] raw_pictureData;
     private byte[] remainingData;
@@ -421,6 +421,12 @@ public final class EscherMetafileBlip extends EscherBlipRecord {
 
         setCompressedSize(raw_pictureData.length);
         setCompressed(true);
+    }
+
+    @Override
+    public void setUIDs(byte[] uid) {
+        setUID(uid);
+        setPrimaryUID(uid);
     }
 
     @Override

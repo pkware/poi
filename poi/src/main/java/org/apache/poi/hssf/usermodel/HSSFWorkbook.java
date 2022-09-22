@@ -45,7 +45,6 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.regex.Pattern;
 
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream;
 import org.apache.commons.io.output.UnsynchronizedByteArrayOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -53,9 +52,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.POIDocument;
 import org.apache.poi.ddf.EscherBSERecord;
-import org.apache.poi.ddf.EscherBitmapBlip;
 import org.apache.poi.ddf.EscherBlipRecord;
-import org.apache.poi.ddf.EscherMetafileBlip;
 import org.apache.poi.ddf.EscherRecord;
 import org.apache.poi.hpsf.ClassID;
 import org.apache.poi.hpsf.ClassIDPredefined;
@@ -84,7 +81,6 @@ import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DirectoryNode;
 import org.apache.poi.poifs.filesystem.DocumentNode;
 import org.apache.poi.poifs.filesystem.EntryUtils;
-import org.apache.poi.poifs.filesystem.FileMagic;
 import org.apache.poi.poifs.filesystem.FilteringDirectoryNode;
 import org.apache.poi.poifs.filesystem.Ole10Native;
 import org.apache.poi.poifs.filesystem.POIFSDocument;
@@ -1934,17 +1930,6 @@ public final class HSSFWorkbook extends POIDocument implements Workbook {
         w.flush();
     }
 
-    void initDrawings() {
-        DrawingManager2 mgr = workbook.findDrawingGroup();
-        if (mgr != null) {
-            for (HSSFSheet sh : _sheets) {
-                sh.getDrawingPatriarch();
-            }
-        } else {
-            workbook.createDrawingGroup();
-        }
-    }
-
     /**
      * Adds a picture to the workbook.
      *
@@ -1958,80 +1943,13 @@ public final class HSSFWorkbook extends POIDocument implements Workbook {
      * @see #PICTURE_TYPE_JPEG
      * @see #PICTURE_TYPE_DIB
      */
-    @SuppressWarnings("fallthrough")
     @Override
     public int addPicture(byte[] pictureData, int format) {
-        initDrawings();
+        DrawingManager2 drawingManager = workbook.getDrawingManager();
+        HSSFPictureData picture = drawingManager.allocatePicture(format);
+        picture.setData(pictureData);
 
-        byte[] uid = DigestUtils.md5(pictureData);
-        EscherBlipRecord blipRecord;
-        int blipSize;
-        short escherTag;
-        switch (format) {
-            case PICTURE_TYPE_WMF:
-                // remove first 22 bytes if file starts with the WMF placeable header
-                if (FileMagic.valueOf(pictureData) == FileMagic.WMF) {
-                    pictureData = IOUtils.safelyClone(pictureData, 22, pictureData.length - 22, MAX_IMAGE_LENGTH);
-                }
-                // fall through
-            case PICTURE_TYPE_EMF:
-                EscherMetafileBlip blipRecordMeta = new EscherMetafileBlip();
-                blipRecord = blipRecordMeta;
-                blipRecordMeta.setUID(uid);
-                blipRecordMeta.setPictureData(pictureData);
-                // taken from libre office export, it won't open, if this is left to 0
-                blipRecordMeta.setFilter((byte) -2);
-                blipSize = blipRecordMeta.getCompressedSize() + 58;
-                escherTag = 0;
-                break;
-            default:
-                EscherBitmapBlip blipRecordBitmap = new EscherBitmapBlip();
-                blipRecord = blipRecordBitmap;
-                blipRecordBitmap.setUID(uid);
-                blipRecordBitmap.setMarker((byte) 0xFF);
-                blipRecordBitmap.setPictureData(pictureData);
-                blipSize = pictureData.length + 25;
-                escherTag = (short) 0xFF;
-                break;
-        }
-
-        blipRecord.setRecordId((short) (EscherBlipRecord.RECORD_ID_START + format));
-        switch (format) {
-            case PICTURE_TYPE_EMF:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_EMF);
-                break;
-            case PICTURE_TYPE_WMF:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_WMF);
-                break;
-            case PICTURE_TYPE_PICT:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_PICT);
-                break;
-            case PICTURE_TYPE_PNG:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_PNG);
-                break;
-            case PICTURE_TYPE_JPEG:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_JPEG);
-                break;
-            case PICTURE_TYPE_DIB:
-                blipRecord.setOptions(HSSFPictureData.MSOBI_DIB);
-                break;
-            default:
-                throw new IllegalStateException("Unexpected picture format: " + format);
-        }
-
-        EscherBSERecord r = new EscherBSERecord();
-        r.setRecordId(EscherBSERecord.RECORD_ID);
-        r.setOptions((short) (0x0002 | (format << 4)));
-        r.setBlipTypeMacOS((byte) format);
-        r.setBlipTypeWin32((byte) format);
-        r.setUid(uid);
-        r.setTag(escherTag);
-        r.setSize(blipSize);
-        r.setRef(0);
-        r.setOffset(0);
-        r.setBlipRecord(blipRecord);
-
-        return workbook.addBSERecord(r);
+        return drawingManager.getPictureCount();
     }
 
     /**
@@ -2041,42 +1959,7 @@ public final class HSSFWorkbook extends POIDocument implements Workbook {
      */
     @Override
     public List<HSSFPictureData> getAllPictures() {
-        // The drawing group record always exists at the top level, so we won't need to do this recursively.
-        List<HSSFPictureData> pictures = new ArrayList<>();
-        for (org.apache.poi.hssf.record.Record r : workbook.getRecords()) {
-            if (r instanceof AbstractEscherHolderRecord) {
-                ((AbstractEscherHolderRecord) r).decode();
-                List<EscherRecord> escherRecords = ((AbstractEscherHolderRecord) r).getEscherRecords();
-                searchForPictures(escherRecords, pictures);
-            }
-        }
-        return Collections.unmodifiableList(pictures);
-    }
-
-    /**
-     * Performs a recursive search for pictures in the given list of escher records.
-     *
-     * @param escherRecords the escher records.
-     * @param pictures      the list to populate with the pictures.
-     */
-    private void searchForPictures(List<EscherRecord> escherRecords, List<HSSFPictureData> pictures) {
-        for (EscherRecord escherRecord : escherRecords) {
-
-            if (escherRecord instanceof EscherBSERecord) {
-                EscherBlipRecord blip = ((EscherBSERecord) escherRecord).getBlipRecord();
-                if (blip != null) {
-                    // TODO: Some kind of structure.
-                    HSSFPictureData picture = new HSSFPictureData(blip);
-                    pictures.add(picture);
-                }
-
-
-            }
-
-            // Recursive call.
-            searchForPictures(escherRecord.getChildRecords(), pictures);
-        }
-
+        return workbook.getDrawingManager().getAllPictures();
     }
 
     static Map<String, ClassID> getOleMap() {

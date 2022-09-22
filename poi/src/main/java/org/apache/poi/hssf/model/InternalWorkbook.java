@@ -143,8 +143,14 @@ public final class InternalWorkbook {
     private int maxformatid;
     /** whether 1904 date windowing is being used */
     private boolean uses1904datewindowing;
+
+    /**
+     * Manager to handle drawings in this workbook.
+     *
+     * This field may be {@code null}. You should not access this field directly. Instead, call
+     * {@link #getDrawingManager()}.
+     */
     private DrawingManager2 drawingManager;
-    private final List<EscherBSERecord> escherBSERecords;
     private WindowOneRecord windowOne;
     private FileSharingRecord fileShare;
     private WriteAccessRecord writeAccess;
@@ -165,7 +171,6 @@ public final class InternalWorkbook {
         numfonts = 0;
         maxformatid = -1;
         uses1904datewindowing = false;
-        escherBSERecords = new ArrayList<>();
         commentRecords = new LinkedHashMap<>();
     }
 
@@ -1762,24 +1767,6 @@ public final class InternalWorkbook {
         return -1;
     }
 
-    /**
-     * Returns the next occurance of a record matching a particular sid.
-     *
-     * @param sid the sid
-     * @param pos specifies the n-th matching sid
-     *
-     * @return the matching record or {@code null} if it wasn't found
-     */
-    public Record findNextRecordBySid(short sid, int pos) {
-        int matches = 0;
-        for (Record record : records.getRecords() ) {
-            if (record.getSid() == sid && matches++ == pos) {
-                return record;
-            }
-        }
-        return null;
-    }
-
     public List<HyperlinkRecord> getHyperlinks()
     {
         return hyperlinks;
@@ -1824,175 +1811,32 @@ public final class InternalWorkbook {
         return palette;
     }
 
-    /**
-     * Finds the primary drawing group, if one already exists
-     *
-     * @return the primary drawing group
-     */
-    public DrawingManager2 findDrawingGroup() {
-        if(drawingManager != null) {
-           // We already have it!
-           return drawingManager;
-        }
-
-        // Need to find a DrawingGroupRecord that contains a EscherDggRecord
-        for(Record r : records.getRecords() ) {
-            if (!(r instanceof DrawingGroupRecord)) {
-                continue;
-            }
-            DrawingGroupRecord dg = (DrawingGroupRecord)r;
-            dg.decode();
-            drawingManager = findDrawingManager(dg, escherBSERecords);
-            if (drawingManager != null) {
-                return drawingManager;
-            }
-        }
-
-        // TODO: we've already scanned the records, why should this work any better now?
-        // Look for the DrawingGroup record
-        DrawingGroupRecord dg = (DrawingGroupRecord)findFirstRecordBySid(DrawingGroupRecord.sid);
-        drawingManager = findDrawingManager(dg, escherBSERecords);
-        return drawingManager;
-    }
-
-    private static DrawingManager2 findDrawingManager(DrawingGroupRecord dg, List<EscherBSERecord> escherBSERecords) {
-        if (dg == null) {
-            return null;
-        }
-        // If there is one, does it have a EscherDggRecord?
-        EscherContainerRecord cr = dg.getEscherContainer();
-        if (cr == null) {
-            return null;
-        }
-
-        EscherDggRecord dgg = null;
-        EscherContainerRecord bStore = null;
-        for(EscherRecord er : cr) {
-            if (er instanceof EscherDggRecord) {
-                dgg = (EscherDggRecord) er;
-            } else if (er.getRecordId() == EscherContainerRecord.BSTORE_CONTAINER) {
-                bStore = (EscherContainerRecord) er;
-            }
-        }
-
-        if(dgg == null) {
-            return null;
-        }
-
-        DrawingManager2 dm = new DrawingManager2(dgg);
-        if(bStore != null){
-            for (EscherRecord bs : bStore) {
-                if(bs instanceof EscherBSERecord) {
-                    escherBSERecords.add((EscherBSERecord)bs);
-                }
-            }
-        }
-        return dm;
-    }
-
-    /**
-     * Creates a primary drawing group record.  If it already
-     *  exists then it's modified.
-     */
-    public void createDrawingGroup() {
-        if (drawingManager == null) {
-            EscherContainerRecord dggContainer = new EscherContainerRecord();
-            EscherDggRecord dgg = new EscherDggRecord();
-            EscherOptRecord opt = new EscherOptRecord();
-            EscherSplitMenuColorsRecord splitMenuColors = new EscherSplitMenuColorsRecord();
-
-            dggContainer.setRecordId((short) 0xF000);
-            dggContainer.setOptions((short) 0x000F);
-            dgg.setRecordId(EscherDggRecord.RECORD_ID);
-            dgg.setOptions((short)0x0000);
-            dgg.setShapeIdMax(1024);
-            dgg.setNumShapesSaved(0);
-            dgg.setDrawingsSaved(0);
-            dgg.setFileIdClusters(new EscherDggRecord.FileIdCluster[] {} );
-            drawingManager = new DrawingManager2(dgg);
-            EscherContainerRecord bstoreContainer = null;
-            if (!escherBSERecords.isEmpty())
-            {
-                bstoreContainer = new EscherContainerRecord();
-                bstoreContainer.setRecordId( EscherContainerRecord.BSTORE_CONTAINER );
-                bstoreContainer.setOptions( (short) ( (escherBSERecords.size() << 4) | 0xF ) );
-                for (EscherRecord escherRecord : escherBSERecords) {
-                    bstoreContainer.addChildRecord( escherRecord );
-                }
-            }
-            opt.setRecordId((short) 0xF00B);
-            opt.setOptions((short) 0x0033);
-            opt.addEscherProperty( new EscherBoolProperty(EscherPropertyTypes.TEXT__SIZE_TEXT_TO_FIT_SHAPE, 524296) );
-            opt.addEscherProperty( new EscherRGBProperty(EscherPropertyTypes.FILL__FILLCOLOR, 0x08000041) );
-            opt.addEscherProperty( new EscherRGBProperty(EscherPropertyTypes.LINESTYLE__COLOR, 134217792) );
-            splitMenuColors.setRecordId((short) 0xF11E);
-            splitMenuColors.setOptions((short) 0x0040);
-            splitMenuColors.setColor1(0x0800000D);
-            splitMenuColors.setColor2(0x0800000C);
-            splitMenuColors.setColor3(0x08000017);
-            splitMenuColors.setColor4(0x100000F7);
-
-            dggContainer.addChildRecord(dgg);
-            if (bstoreContainer != null) {
-                dggContainer.addChildRecord( bstoreContainer );
-            }
-            dggContainer.addChildRecord(opt);
-            dggContainer.addChildRecord(splitMenuColors);
-
-            int dgLoc = findFirstRecordLocBySid(DrawingGroupRecord.sid);
-            if (dgLoc == -1) {
-                DrawingGroupRecord drawingGroup = new DrawingGroupRecord();
-                drawingGroup.addEscherRecord(dggContainer);
-                int loc = findFirstRecordLocBySid(CountryRecord.sid);
-
-                getRecords().add(loc+1, drawingGroup);
-            } else {
-                DrawingGroupRecord drawingGroup = new DrawingGroupRecord();
-                drawingGroup.addEscherRecord(dggContainer);
-                getRecords().set(dgLoc, drawingGroup);
-            }
-
-        }
-    }
-
     public WindowOneRecord getWindowOne() {
         return windowOne;
     }
 
+    /**
+     * Returns the BSE record at the given index.
+     *
+     * @param pictureIndex 1-based index of the picture for which to retrieve the BSE record.
+     * @return BSE record for the picture at the 1-based index.
+     * @throws IndexOutOfBoundsException if the index is larger than the number of pictures available.
+     */
     public EscherBSERecord getBSERecord(int pictureIndex) {
-        return escherBSERecords.get(pictureIndex-1);
+        return getDrawingManager().getBSERecord(pictureIndex);
     }
 
-    public int addBSERecord(EscherBSERecord e) {
-        createDrawingGroup();
-
-        // maybe we don't need that as an instance variable anymore
-        escherBSERecords.add( e );
-
-        int dgLoc = findFirstRecordLocBySid(DrawingGroupRecord.sid);
-        DrawingGroupRecord drawingGroup = (DrawingGroupRecord) getRecords().get( dgLoc );
-
-        EscherContainerRecord dggContainer = (EscherContainerRecord) drawingGroup.getEscherRecord( 0 );
-        EscherContainerRecord bstoreContainer;
-        if (dggContainer.getChild( 1 ).getRecordId() == EscherContainerRecord.BSTORE_CONTAINER )
-        {
-            bstoreContainer = (EscherContainerRecord) dggContainer.getChild( 1 );
-        } else {
-            bstoreContainer = new EscherContainerRecord();
-            bstoreContainer.setRecordId( EscherContainerRecord.BSTORE_CONTAINER );
-            List<EscherRecord> childRecords = dggContainer.getChildRecords();
-            childRecords.add(1, bstoreContainer);
-            dggContainer.setChildRecords(childRecords);
+    /**
+     * Returns the {@link DrawingManager2} for this workbook.
+     *
+     * @return Drawing manager for this workbook.
+     */
+    public DrawingManager2 getDrawingManager() {
+        // Doesn't need to be synchronized because the factory function is.
+        if (drawingManager != null) {
+            return drawingManager;
         }
-        bstoreContainer.setOptions( (short) ( (escherBSERecords.size() << 4) | 0xF ) );
-
-        bstoreContainer.addChildRecord( e );
-
-        return escherBSERecords.size();
-    }
-
-    public DrawingManager2 getDrawingManager()
-    {
+        drawingManager = DrawingManager2.forWorkbook(this);
         return drawingManager;
     }
 
@@ -2101,13 +1945,7 @@ public final class InternalWorkbook {
      * @param sheet the cloned sheet
      */
     public void cloneDrawings(InternalSheet sheet){
-
-        findDrawingGroup();
-
-        if(drawingManager == null) {
-            //this workbook does not have drawings
-            return;
-        }
+        DrawingManager2 drawingManager = getDrawingManager();
 
         //check if the cloned sheet has drawings
         int aggLoc = sheet.aggregateDrawingRecords(drawingManager, false);
