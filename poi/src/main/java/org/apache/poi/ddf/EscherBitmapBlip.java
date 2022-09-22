@@ -121,6 +121,11 @@ public class EscherBitmapBlip extends EscherBlipRecord {
     }
 
     @Override
+    public void setUIDs(byte[] uid) {
+        setUID(uid);
+    }
+
+    @Override
     public Map<String, Supplier<?>> getGenericProperties() {
         return GenericRecordUtil.getGenericProperties(
             "base", super::getGenericProperties,

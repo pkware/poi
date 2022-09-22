@@ -802,7 +802,7 @@ final class TestHSSFSheet extends BaseTestSheet {
         try (HSSFWorkbook wb1 = HSSFTestDataSamples.openSampleWorkbook("45720.xls")) {
             HSSFSheet sheet1 = wb1.getSheetAt(0);
 
-            DrawingManager2 dm1 = wb1.getWorkbook().findDrawingGroup();
+            DrawingManager2 dm1 = wb1.getWorkbook().getDrawingManager();
             int maxDrawingGroupId1 = dm1.getDgg().getMaxDrawingGroupId();
             wb1.cloneSheet(0);
 
@@ -810,7 +810,7 @@ final class TestHSSFSheet extends BaseTestSheet {
             assertEquals(maxDrawingGroupId1 + 1, dm1.getDgg().getMaxDrawingGroupId());
 
             try (HSSFWorkbook wb2 = writeOutAndReadBack(wb1)) {
-                DrawingManager2 dm2 = wb2.getWorkbook().findDrawingGroup();
+                DrawingManager2 dm2 = wb1.getWorkbook().getDrawingManager();
                 assertEquals(maxDrawingGroupId1 + 1, dm2.getDgg().getMaxDrawingGroupId());
 
                 HSSFSheet sheet2 = wb2.getSheetAt(1);

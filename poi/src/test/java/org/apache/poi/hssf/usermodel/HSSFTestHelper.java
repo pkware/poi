@@ -18,7 +18,6 @@
 package org.apache.poi.hssf.usermodel;
 
 import org.apache.poi.ddf.*;
-import org.apache.poi.hssf.model.DrawingManager2;
 import org.apache.poi.hssf.model.InternalSheet;
 import org.apache.poi.hssf.model.InternalWorkbook;
 import org.apache.poi.hssf.record.EscherAggregate;
@@ -32,28 +31,6 @@ import org.apache.poi.hssf.record.TextObjectRecord;
  */
 public class HSSFTestHelper {
 
-    public static class MockDrawingManager extends DrawingManager2 {
-
-        public MockDrawingManager (){
-            super(null);
-        }
-
-        @Override
-        public int allocateShapeId(EscherDgRecord dg) {
-            return 1025;
-        }
-
-        @Override
-        public EscherDgRecord createDgRecord()
-        {
-            EscherDgRecord dg = new EscherDgRecord();
-            dg.setRecordId( EscherDgRecord.RECORD_ID );
-            dg.setOptions( (short) (16) );
-            dg.setNumShapes( 1 );
-            dg.setLastMSOSPID( 1024 );
-            return dg;
-        }
-    }
     /**
      * Lets non UserModel tests at the low level Workbook
      */
