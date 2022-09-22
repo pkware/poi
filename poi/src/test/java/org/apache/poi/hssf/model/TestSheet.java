@@ -731,7 +731,7 @@ final class TestSheet {
 
         List<RecordBase> sheetRecords = sheet.getRecords();
 
-        DrawingManager2 drawingManager = new DrawingManager2(new EscherDggRecord() );
+        DrawingManager2 drawingManager = new HSSFWorkbook().getWorkbook().getDrawingManager();
         sheet.aggregateDrawingRecords(drawingManager, false);
 
         assertEquals(4, sheetRecords.size());
