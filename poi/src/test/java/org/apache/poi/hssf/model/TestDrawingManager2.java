@@ -18,11 +18,23 @@
 package org.apache.poi.hssf.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.apache.poi.ddf.EscherBSERecord;
 import org.apache.poi.ddf.EscherDgRecord;
 import org.apache.poi.ddf.EscherDggRecord;
+import org.apache.poi.hssf.usermodel.HSSFPictureData;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.List;
 
 final class TestDrawingManager2 {
     private DrawingManager2 drawingManager2;
@@ -30,9 +42,8 @@ final class TestDrawingManager2 {
 
     @BeforeEach
     void setUp() {
-        dgg = new EscherDggRecord();
-        dgg.setFileIdClusters( new EscherDggRecord.FileIdCluster[0] );
-        drawingManager2 = new DrawingManager2( dgg );
+        drawingManager2 = new HSSFWorkbook().getWorkbook().getDrawingManager();
+        dgg = drawingManager2.getDgg();
     }
 
     @Test
@@ -54,18 +65,14 @@ final class TestDrawingManager2 {
     @Test
     void testCreateDgRecordOld() {
         // converted from TestDrawingManager(1)
-        EscherDggRecord dgg = new EscherDggRecord();
-        dgg.setDrawingsSaved( 0 );
-        dgg.setFileIdClusters( new EscherDggRecord.FileIdCluster[]{} );
-        DrawingManager2 dm = new DrawingManager2( dgg );
 
-        EscherDgRecord dgRecord = dm.createDgRecord();
+        EscherDgRecord dgRecord = drawingManager2.createDgRecord();
         assertEquals( -1, dgRecord.getLastMSOSPID() );
         assertEquals( 0, dgRecord.getNumShapes() );
-        assertEquals( 1, dm.getDgg().getDrawingsSaved() );
-        assertEquals( 1, dm.getDgg().getFileIdClusters().length );
-        assertEquals( 1, dm.getDgg().getFileIdClusters()[0].getDrawingGroupId() );
-        assertEquals( 0, dm.getDgg().getFileIdClusters()[0].getNumShapeIdsUsed() );
+        assertEquals( 1, drawingManager2.getDgg().getDrawingsSaved() );
+        assertEquals( 1, drawingManager2.getDgg().getFileIdClusters().length );
+        assertEquals( 1, drawingManager2.getDgg().getFileIdClusters()[0].getDrawingGroupId() );
+        assertEquals( 0, drawingManager2.getDgg().getFileIdClusters()[0].getNumShapeIdsUsed() );
     }
 
     @Test
@@ -107,15 +114,116 @@ final class TestDrawingManager2 {
     @Test
     void testFindNewDrawingGroupId() {
         // converted from TestDrawingManager(1)
-        EscherDggRecord dgg = new EscherDggRecord();
         dgg.setDrawingsSaved( 1 );
         dgg.setFileIdClusters( new EscherDggRecord.FileIdCluster[]{
             new EscherDggRecord.FileIdCluster( 2, 10 )} );
-        DrawingManager2 dm = new DrawingManager2( dgg );
-        assertEquals( 1, dm.findNewDrawingGroupId() );
+        assertEquals( 1, drawingManager2.findNewDrawingGroupId() );
         dgg.setFileIdClusters( new EscherDggRecord.FileIdCluster[]{
             new EscherDggRecord.FileIdCluster( 1, 10 ),
             new EscherDggRecord.FileIdCluster( 2, 10 )} );
-        assertEquals( 3, dm.findNewDrawingGroupId() );
+        assertEquals( 3, drawingManager2.findNewDrawingGroupId() );
+    }
+
+    /**
+     * Verify that the {@link DrawingManager2#getPictureCount()} function returns the correct count for various states.
+     */
+    @Test
+    void getPictureCount() throws IOException {
+        HSSFWorkbook workbook = new HSSFWorkbook();
+        DrawingManager2 drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+
+        // No pictures
+        assertEquals(0, drawingManager.getPictureCount());
+
+        // 1 Picture
+        // Picture content and type don't matter
+        workbook.addPicture(new byte[10], HSSFWorkbook.PICTURE_TYPE_JPEG);
+        assertEquals(1, drawingManager.getPictureCount());
+
+        // 2 Pictures
+        // Picture content and type don't matter
+        workbook.addPicture(new byte[50], HSSFWorkbook.PICTURE_TYPE_PNG);
+        assertEquals(2, drawingManager.getPictureCount());
+
+        // From serialized workbook
+        ByteArrayOutputStream inMemory = new ByteArrayOutputStream();
+        workbook.write(inMemory);
+
+        workbook = new HSSFWorkbook(new ByteArrayInputStream(inMemory.toByteArray()));
+        drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+        assertEquals(2, drawingManager.getPictureCount());
+    }
+
+    /**
+     * Verify that the {@link DrawingManager2#getAllPictures()} ()} function returns all pictures in the right order.
+     */
+    @Test
+    void getAllPictures() throws IOException {
+        ByteArrayOutputStream inMemory = new ByteArrayOutputStream();
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
+            DrawingManager2 drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+
+            // No pictures
+            assertTrue(drawingManager.getAllPictures().isEmpty());
+
+            // 1 Picture
+            // Picture content and type don't matter
+            workbook.addPicture(new byte[10], HSSFWorkbook.PICTURE_TYPE_JPEG);
+            assertEquals(1, drawingManager.getAllPictures().size());
+
+            // 2 Pictures
+            // Picture content and type don't matter
+            workbook.addPicture(new byte[50], HSSFWorkbook.PICTURE_TYPE_PNG);
+            List<HSSFPictureData> pictures = drawingManager.getAllPictures();
+            assertEquals(2, pictures.size());
+            assertEquals(10, pictures.get(0).getData().length);
+            assertEquals(50, pictures.get(1).getData().length);
+
+            workbook.write(inMemory);
+        }
+
+        // From serialized workbook
+        try (HSSFWorkbook workbook = new HSSFWorkbook(new ByteArrayInputStream(inMemory.toByteArray()))) {
+            DrawingManager2 drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+            List<HSSFPictureData> pictures = drawingManager.getAllPictures();
+            assertEquals(2, pictures.size());
+            assertEquals(10, pictures.get(0).getData().length);
+            assertEquals(50, pictures.get(1).getData().length);
+        }
+    }
+
+    /**
+     * Verify that new BSE records for metafiles have the right tag.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {Workbook.PICTURE_TYPE_EMF, Workbook.PICTURE_TYPE_WMF})
+    void allocatePicture_metafiles(int format) throws IOException {
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
+            DrawingManager2 drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+            HSSFPictureData picture = drawingManager.allocatePicture(format);
+            assertEquals(format, picture.getFormat());
+            EscherBSERecord record = drawingManager.getBSERecord(1);
+            assertEquals(0, record.getTag());
+        }
+    }
+
+    /**
+     * Verify that new BSE records for bitmaps have the right tag.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {
+        Workbook.PICTURE_TYPE_JPEG,
+        Workbook.PICTURE_TYPE_PICT,
+        Workbook.PICTURE_TYPE_PNG,
+        Workbook.PICTURE_TYPE_DIB
+    })
+    void allocatePicture_bitmap(int format) throws IOException {
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
+            DrawingManager2 drawingManager = workbook.getInternalWorkbook().getDrawingManager();
+            HSSFPictureData picture = drawingManager.allocatePicture(format);
+            assertEquals(format, picture.getFormat());
+            EscherBSERecord record = drawingManager.getBSERecord(1);
+            assertEquals((short) 0xFF, record.getTag());
+        }
     }
 }

@@ -17,22 +17,27 @@
 
 package org.apache.poi.hssf.usermodel;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.imageio.IIOException;
 import javax.imageio.ImageIO;
 
+import org.apache.poi.POIDataSamples;
 import org.apache.poi.POITestCase;
 import org.apache.poi.hssf.HSSFTestDataSamples;
+import org.apache.poi.hssf.record.crypto.Biff8EncryptionKey;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Test <code>HSSFPictureData</code>.
@@ -116,5 +121,52 @@ final class TestHSSFPictureData {
         for(HSSFPictureData pict : lst){
             assertNotNull(pict);
         }
+    }
+
+    /**
+     * Verify that data set via {@link HSSFPictureData#setData(byte[])} is saved when the workbook is serialized.
+     */
+    @Test
+    void setData() throws IOException {
+        byte[] jpg = POIDataSamples.getDocumentInstance().readFile("abstract1.jpg");
+        byte[] png = POIDataSamples.getSlideShowInstance().readFile("tomcat.png");
+        byte[] wmf = POIDataSamples.getSlideShowInstance().readFile("60677.wmf");
+        byte[] emf = POIDataSamples.getDocumentInstance().readFile("vector_image.emf");
+
+        ByteArrayOutputStream inMemory = new ByteArrayOutputStream();
+        try (HSSFWorkbook wb = HSSFTestDataSamples.openSampleWorkbook("SimpleWithImages.xls")) {
+            List<HSSFPictureData> pictures = wb.getAllPictures();
+
+            pictures.get(0).setData(jpg);
+            pictures.get(1).setData(png);
+            pictures.get(2).setData(wmf);
+            pictures.get(3).setData(emf);
+
+            wb.write(inMemory);
+        }
+
+        try (HSSFWorkbook wb = new HSSFWorkbook(new ByteArrayInputStream(inMemory.toByteArray()))) {
+            List<HSSFPictureData> pictures = wb.getAllPictures();
+
+            assertArrayEquals(jpg, pictures.get(0).getData());
+            assertArrayEquals(png, pictures.get(1).getData());
+
+            // Strip the WMF placeable header on this file
+            assertArrayEquals(Arrays.copyOfRange(wmf, 22, wmf.length), pictures.get(2).getData());
+            assertArrayEquals(emf, pictures.get(3).getData());
+        }
+    }
+
+    /**
+     * Verify that data set via {@link HSSFPictureData#setData(byte[])} is saved when the workbook is serialized and is
+     * encrypted.
+     */
+    @Test
+    void setData_encryptedWorkbook() throws IOException {
+        // Turn on encryption
+        Biff8EncryptionKey.setCurrentUserPassword("new password");
+
+        // Run the test
+        setData();
     }
 }

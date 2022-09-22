@@ -380,7 +380,7 @@ class TestDrawingAggregate {
 
             // aggregate drawing records.
             // The subrange [19, 388] is expected to be replaced with a EscherAggregate object
-            DrawingManager2 drawingManager = iworkbook.findDrawingGroup();
+            DrawingManager2 drawingManager = iworkbook.getDrawingManager();
             int loc = isheet.aggregateDrawingRecords(drawingManager, false);
             EscherAggregate agg = (EscherAggregate) records.get(loc);
 
@@ -444,7 +444,7 @@ class TestDrawingAggregate {
 
             // aggregate drawing records.
             // The subrange [19, 38] is expected to be replaced with a EscherAggregate object
-            DrawingManager2 drawingManager = iworkbook.findDrawingGroup();
+            DrawingManager2 drawingManager = iworkbook.getDrawingManager();
             int loc = isheet.aggregateDrawingRecords(drawingManager, false);
             EscherAggregate agg = (EscherAggregate) records.get(loc);
 
@@ -525,7 +525,7 @@ class TestDrawingAggregate {
 
             // aggregate drawing records.
             // The subrange [19, 38] is expected to be replaced with a EscherAggregate object
-            DrawingManager2 drawingManager = iworkbook.findDrawingGroup();
+            DrawingManager2 drawingManager = iworkbook.getDrawingManager();
             int loc = isheet.aggregateDrawingRecords(drawingManager, false);
             EscherAggregate agg = (EscherAggregate) records.get(loc);
 
@@ -581,7 +581,7 @@ class TestDrawingAggregate {
 
             // aggregate drawing records.
             // The subrange [19, 299] is expected to be replaced with a EscherAggregate object
-            DrawingManager2 drawingManager = iworkbook.findDrawingGroup();
+            DrawingManager2 drawingManager = iworkbook.getDrawingManager();
             int loc = isheet.aggregateDrawingRecords(drawingManager, false);
             EscherAggregate agg = (EscherAggregate) records.get(loc);
 
@@ -721,7 +721,7 @@ class TestDrawingAggregate {
         int[] actualSids = dgRecords.stream().mapToInt(Record::getSid).toArray();
         assertArrayEquals(expectedSids, actualSids, "unexpected record.sid");
 
-        DrawingManager2 drawingManager = new DrawingManager2(new EscherDggRecord());
+        DrawingManager2 drawingManager = new HSSFWorkbook().getWorkbook().getDrawingManager();
 
         // create a dummy sheet consisting of our test data
         InternalSheet sheet = InternalSheet.createSheet();
@@ -887,7 +887,7 @@ class TestDrawingAggregate {
         int[] actualSids = dgRecords.stream().mapToInt(Record::getSid).toArray();
         assertArrayEquals(expectedSids, actualSids, "unexpected record.sid");
 
-        DrawingManager2 drawingManager = new DrawingManager2(new EscherDggRecord());
+        DrawingManager2 drawingManager = new HSSFWorkbook().getWorkbook().getDrawingManager();
 
         // create a dummy sheet consisting of our test data
         InternalSheet sheet = InternalSheet.createSheet();
