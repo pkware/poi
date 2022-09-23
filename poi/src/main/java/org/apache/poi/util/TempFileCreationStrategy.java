@@ -19,6 +19,7 @@ package org.apache.poi.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * Interface used by the {@link TempFile} utility class to create temporary files.
@@ -60,6 +61,7 @@ import java.io.IOException;
  * </ul>
  *
  */
+// TODO We should probably deprecate the old methods
 public interface TempFileCreationStrategy {
     /**
      * Creates a new and empty temporary file.
@@ -85,4 +87,33 @@ public interface TempFileCreationStrategy {
      * @since POI 3.15 beta 3.
      */
     File createTempDirectory(String prefix) throws IOException;
+
+    /**
+     * Creates a new and empty temporary file.
+     *
+     * @param prefix The prefix to be used to generate the name of the temporary file.
+     * @param suffix The suffix to be used to generate the name of the temporary file.
+     *
+     * @return The path to the newly created and empty temporary file.
+     *
+     * @throws IOException If no temporary file could be created.
+     */
+    default Path createTemporaryFile(String prefix, String suffix) throws IOException {
+        return createTempFile(prefix, suffix).toPath();
+    }
+
+    /**
+     * Creates a new and empty temporary directory.
+     *
+     * @param prefix The directory name to be used to generate the name of the temporary directory.
+     *
+     * @return The path to the newly created and empty temporary directory.
+     *
+     * @throws IOException If no temporary directory could be created.
+     *
+     * @since POI 3.15 beta 3.
+     */
+    default Path createTemporaryDirectory(String prefix) throws IOException {
+        return createTempDirectory(prefix).toPath();
+    }
 }

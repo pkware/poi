@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
@@ -178,31 +180,35 @@ public final class ZipHelper {
         return new ZipArchiveThresholdInputStream(new ZipArchiveInputStream(checkedStream));
     }
 
+    public static ZipSecureFile openZipFile(File file) throws IOException, NotOfficeXmlFileException {
+        return openZipFile(file.toPath());
+    }
+
     /**
      * Opens the specified file as a secure zip, or returns null if no 
      *  such file exists
      *
-     * @param file
+     * @param path
      *            The file to open.
      * @return The zip archive freshly open.
      * @throws IOException if the zip file cannot be opened or closed to read the header signature
      * @throws NotOfficeXmlFileException if stream does not start with zip header signature
      */
-    public static ZipSecureFile openZipFile(File file) throws IOException, NotOfficeXmlFileException {
-        if (!file.exists()) {
+    public static ZipSecureFile openZipFile(Path path) throws IOException, NotOfficeXmlFileException {
+        if (!Files.exists(path)) {
             throw new FileNotFoundException("File does not exist");
         }
-        if (file.isDirectory()) {
+        if (Files.isDirectory(path)) {
             throw new IOException("File is a directory");
         }
         
         // Peek at the first few bytes to sanity check
-        try (FileInputStream input = new FileInputStream(file)) {
+        try (InputStream input = Files.newInputStream(path)) {
             verifyZipHeader(input);
         }
 
         // Open as a proper zip file
-        return new ZipSecureFile(file);
+        return new ZipSecureFile(path);
     }
 
     /**

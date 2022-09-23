@@ -19,6 +19,7 @@ package org.apache.poi.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * Interface for creating temporary files. Collects them all into one directory by default.
@@ -68,5 +69,29 @@ public final class TempFile {
     
     public static File createTempDirectory(String name) throws IOException {
         return strategy.createTempDirectory(name);
+    }
+
+    // TODO Do we actually want new methods here? Or should we expose the strategy and call it directly? Is there a way
+    //  to make it not-static?
+    /**
+     * Creates a new and empty temporary file. By default, files are collected into one directory and are
+     * deleted on exit from the VM, although they can be kept by defining the system property
+     * <code>poi.keep.tmp.files</code> (see {@link DefaultTempFileCreationStrategy}).
+     * <p>
+     * Don't forget to close all files or it might not be possible to delete them.
+     *
+     * @param prefix The prefix to be used to generate the name of the temporary file.
+     * @param suffix The suffix to be used to generate the name of the temporary file.
+     *
+     * @return The path to the newly created and empty temporary file.
+     *
+     * @throws IOException If no temporary file could be created.
+     */
+    public static Path createTemporaryFile(String prefix, String suffix) throws IOException {
+        return strategy.createTemporaryFile(prefix, suffix);
+    }
+
+    public static Path createTemporaryDirectory(String name) throws IOException {
+        return strategy.createTemporaryDirectory(name);
     }
 }
