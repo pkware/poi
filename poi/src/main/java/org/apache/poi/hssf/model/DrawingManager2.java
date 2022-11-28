@@ -320,6 +320,7 @@ public class DrawingManager2 {
             if (blip != null) {
                 pictures.add(new HSSFPictureData(bse));
             } else {
+                /** See {@link EscherBSERecord} */
                 LOGGER.atDebug().log("Encountered BSE record without a BLIP. BSE records must have a BLIP according to the specification.");
             }
         }

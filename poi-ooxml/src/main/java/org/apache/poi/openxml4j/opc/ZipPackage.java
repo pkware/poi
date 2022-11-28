@@ -17,15 +17,17 @@
 
 package org.apache.poi.openxml4j.opc;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.apache.poi.openxml4j.opc.ContentTypes.RELATIONSHIPS_PART;
 import static org.apache.poi.openxml4j.opc.internal.ContentTypeManager.CONTENT_TYPES_PART_NAME;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -159,51 +161,64 @@ public final class ZipPackage extends OPCPackage {
      * @throws InvalidOperationException If the zip file cannot be opened.
      */
     ZipPackage(File file, PackageAccess access) throws InvalidOperationException {
+        this(file.toPath(), access);
+    }
+
+    /**
+     * Constructor. Opens a Zip based Open XML document from a File.
+     *
+     * @param path
+     *            The file to open or create.
+     * @param access
+     *            The package access mode.
+     * @throws InvalidOperationException If the zip file cannot be opened.
+     */
+    ZipPackage(Path path, PackageAccess access) {
         super(access);
 
         ZipEntrySource ze;
         try {
-            final ZipFile zipFile = ZipHelper.openZipFile(file); // NOSONAR
+            final ZipFile zipFile = ZipHelper.openZipFile(path); // NOSONAR
             ze = new ZipFileZipEntrySource(zipFile);
         } catch (IOException e) {
             // probably not happening with write access - not sure how to handle the default read-write access ...
             if (access == PackageAccess.WRITE) {
-                throw new InvalidOperationException("Can't open the specified file: '" + file + "'", e);
+                throw new InvalidOperationException("Can't open the specified file: '" + path + "'", e);
             }
 
-            LOG.atWarn().log("Error in zip file {} - falling back to stream processing (i.e. ignoring zip central directory)", file);
-            ze = openZipEntrySourceStream(file);
+            LOG.atWarn().log("Error in zip file {} - falling back to stream processing (i.e. ignoring zip central directory)", path);
+            ze = openZipEntrySourceStream(path);
         }
         this.zipArchive = ze;
     }
 
-    private static ZipEntrySource openZipEntrySourceStream(File file) throws InvalidOperationException {
-        final FileInputStream fis;
+    private static ZipEntrySource openZipEntrySourceStream(Path path) throws InvalidOperationException {
+        final InputStream inputStream;
         // Acquire a resource that is needed to read the next level of openZipEntrySourceStream
         try {
             // open the file input stream
-            fis = new FileInputStream(file); // NOSONAR
-        } catch (final FileNotFoundException e) {
+            inputStream = Files.newInputStream(path); // NOSONAR
+        } catch (final IOException e) {
             // If the source cannot be acquired, abort (no resources to free at this level)
-            throw new InvalidOperationException("Can't open the specified file input stream from file: '" + file + "'", e);
+            throw new InvalidOperationException("Can't open the specified file input stream from file: '" + path + "'", e);
         }
 
         // If an error occurs while reading the next level of openZipEntrySourceStream, free the acquired resource
         try {
             // read from the file input stream
-            return openZipEntrySourceStream(fis);
+            return openZipEntrySourceStream(inputStream);
         } catch (final InvalidOperationException|UnsupportedFileFormatException e) {
             // abort: close the zip input stream
-            IOUtils.closeQuietly(fis);
+            IOUtils.closeQuietly(inputStream);
             throw e;
         } catch (final Exception e) {
             // abort: close the file input stream
-            IOUtils.closeQuietly(fis);
-            throw new InvalidOperationException("Failed to read the file input stream from file: '" + file + "'", e);
+            IOUtils.closeQuietly(inputStream);
+            throw new InvalidOperationException("Failed to read the file input stream from file: '" + path + "'", e);
         }
     }
 
-    private static ZipEntrySource openZipEntrySourceStream(FileInputStream fis) throws InvalidOperationException {
+    private static ZipEntrySource openZipEntrySourceStream(InputStream fis) throws InvalidOperationException {
         final ZipArchiveThresholdInputStream zis;
         // Acquire a resource that is needed to read the next level of openZipEntrySourceStream
         try {
@@ -451,20 +466,24 @@ public final class ZipPackage extends OPCPackage {
         // Flush the package
         flush();
 
-        if (this.originalPackagePath == null || this.originalPackagePath.isEmpty()) {
+        if (this.originalPackagePath == null) {
             return;
         }
 
         // Save the content
-        File targetFile = new File(this.originalPackagePath);
-        if (!targetFile.exists()) {
+        if (!Files.exists(this.originalPackagePath)) {
             throw new InvalidOperationException(
                 "Can't close a package not previously open with the open() method !");
         }
 
         // Case of a package previously open
-        String tempFileName = generateTempFileName(FileHelper.getDirectory(targetFile));
-        File tempFile = TempFile.createTempFile(tempFileName, ".tmp");
+        Path tempFile;
+        try {
+            tempFile = generateTempPath();
+        } catch (IOException e) {
+            // Retry in case of fluke naming collision -- second failure should throw, as temp file is needed.
+            tempFile = generateTempPath();
+        }
 
         // Save the final package to a temporary file
         boolean success = false;
@@ -476,30 +495,23 @@ public final class ZipPackage extends OPCPackage {
             IOUtils.closeQuietly(this.zipArchive);
             try {
                 // Copy the new file over the old one if save() succeed
-                if(success) {
-                    FileHelper.copyFile(tempFile, targetFile);
+                if (success) {
+                    Files.move(tempFile, originalPackagePath, REPLACE_EXISTING);
                 }
             } finally {
                 // Either the save operation succeed or not, we delete the temporary file
-                if (!tempFile.delete()) {
-                    LOG.atWarn().log("The temporary file: '{}' cannot be deleted ! Make sure that no other application use it.", targetFile.getAbsolutePath());
-                }
+                Files.deleteIfExists(tempFile);
             }
         }
     }
 
     /**
-     * Create a unique identifier to be use as a temp file name.
+     * Create a unique temp file. Synchronization of the method should eliminate collision of files.
      *
-     * @return A unique identifier use to be use as a temp file name.
+     * @return Path to a temporary file
      */
-    private synchronized String generateTempFileName(File directory) {
-        File tmpFilename;
-        do {
-            tmpFilename = new File(directory.getAbsoluteFile() + File.separator
-                    + "OpenXML4J" + System.nanoTime());
-        } while (tmpFilename.exists());
-        return FileHelper.getFilename(tmpFilename.getAbsoluteFile());
+    private synchronized Path generateTempPath() throws IOException {
+        return File.createTempFile("OpenXML4J" + System.nanoTime(), ".tmp").toPath();
     }
 
     /**
@@ -519,7 +531,6 @@ public final class ZipPackage extends OPCPackage {
 
     /**
      * Save this package into the specified stream
-     *
      *
      * @param outputStream
      *            The stream use to save this package.

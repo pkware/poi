@@ -18,12 +18,13 @@
 package org.apache.poi.openxml4j.opc.internal;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
@@ -179,33 +180,6 @@ public final class ZipHelper {
     }
 
     /**
-     * Opens the specified file as a secure zip, or returns null if no 
-     *  such file exists
-     *
-     * @param file
-     *            The file to open.
-     * @return The zip archive freshly open.
-     * @throws IOException if the zip file cannot be opened or closed to read the header signature
-     * @throws NotOfficeXmlFileException if stream does not start with zip header signature
-     */
-    public static ZipSecureFile openZipFile(File file) throws IOException, NotOfficeXmlFileException {
-        if (!file.exists()) {
-            throw new FileNotFoundException("File does not exist");
-        }
-        if (file.isDirectory()) {
-            throw new IOException("File is a directory");
-        }
-        
-        // Peek at the first few bytes to sanity check
-        try (FileInputStream input = new FileInputStream(file)) {
-            verifyZipHeader(input);
-        }
-
-        // Open as a proper zip file
-        return new ZipSecureFile(file);
-    }
-
-    /**
      * Retrieve and open as a secure zip file with the specified path.
      *
      * @param path
@@ -214,5 +188,43 @@ public final class ZipHelper {
      */
     public static ZipSecureFile openZipFile(String path) throws IOException {
         return openZipFile(new File(path));
+    }
+
+
+    /**
+     * Retrieve and open as a secure zip file with the specified file.
+     *
+     * @param file
+     *            The file to open.
+     * @return The zip archive freshly open.
+     */
+    public static ZipSecureFile openZipFile(File file) throws IOException, NotOfficeXmlFileException {
+        return openZipFile(file.toPath());
+    }
+
+    /**
+     * Retrieve and open as a secure zip file with the specified path.
+     *
+     * @param path
+     *            The file to open.
+     * @return The zip archive freshly open.
+     * @throws IOException if the zip file cannot be opened or closed to read the header signature
+     * @throws NotOfficeXmlFileException if stream does not start with zip header signature
+     */
+    public static ZipSecureFile openZipFile(Path path) throws IOException, NotOfficeXmlFileException {
+        if (!Files.exists(path)) {
+            throw new FileNotFoundException("File does not exist");
+        }
+        if (Files.isDirectory(path)) {
+            throw new IOException("File is a directory");
+        }
+
+        // Peek at the first few bytes to sanity check
+        try (InputStream input = Files.newInputStream(path)) {
+            verifyZipHeader(input);
+        }
+
+        // Open as a proper zip file
+        return new ZipSecureFile(path);
     }
 }
