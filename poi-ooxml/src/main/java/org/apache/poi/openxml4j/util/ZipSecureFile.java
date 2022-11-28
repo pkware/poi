@@ -19,6 +19,12 @@ package org.apache.poi.openxml4j.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.EnumSet;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
@@ -129,13 +135,22 @@ public class ZipSecureFile extends ZipFile {
     }
 
     public ZipSecureFile(File file) throws IOException {
-        super(file);
-        this.fileName = file.getAbsolutePath();
+        this(file.toPath());
+    }
+
+    public ZipSecureFile(Path path) throws IOException {
+        super(
+            Files.newByteChannel(path, EnumSet.of(StandardOpenOption.READ)),
+            path.toAbsolutePath().toString(),
+            StandardCharsets.UTF_8.name(),
+            true,
+            false
+        );
+        this.fileName = path.toAbsolutePath().toString();
     }
 
     public ZipSecureFile(String name) throws IOException {
-        super(name);
-        this.fileName = new File(name).getAbsolutePath();
+        this(Paths.get(name));
     }
 
     /**
@@ -152,7 +167,6 @@ public class ZipSecureFile extends ZipFile {
      * @throws IllegalStateException if the zip file has been closed
      */
     @Override
-    @SuppressWarnings("resource")
     public ZipArchiveThresholdInputStream getInputStream(ZipArchiveEntry entry) throws IOException {
         ZipArchiveThresholdInputStream zatis = new ZipArchiveThresholdInputStream(super.getInputStream(entry));
         zatis.setEntry(entry);
