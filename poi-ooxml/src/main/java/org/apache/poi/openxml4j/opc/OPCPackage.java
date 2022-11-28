@@ -26,18 +26,21 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -126,7 +129,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
     /**
      * File path of this package.
      */
-    protected String originalPackagePath;
+    protected Path originalPackagePath;
 
     /**
      * Output stream for writing this package.
@@ -143,7 +146,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
         if (getClass() != ZipPackage.class) {
             throw new IllegalArgumentException("PackageBase may not be subclassed");
         }
-        this.packageAccess = access;
+        this.packageAccess = Objects.requireNonNull(access);
 
         final ContentType contentType = newCorePropertiesPart();
         // TODO Delocalize specialized marshallers
@@ -257,7 +260,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
             }
         }
 
-        pack.originalPackagePath = new File(path).getAbsolutePath();
+        pack.originalPackagePath = Paths.get(path);
         return pack;
     }
 
@@ -273,21 +276,32 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
     *             If the specified file doesn't exist, and a parsing error
     *             occur.
     */
-   public static OPCPackage open(File file, PackageAccess access)
-         throws InvalidFormatException {
-       if (file == null) {
-           throw new IllegalArgumentException("'file' must be given");
-       }
-       if (file.exists() && file.isDirectory()) {
+   public static OPCPackage open(File file, PackageAccess access) throws InvalidFormatException {
+       return open(file.toPath(), access);
+   }
+
+    /**
+     * Open a package.
+     * @param path
+     *            The path of the file to open.
+     * @param access
+     *            Type of access to the file that is allowed/
+     * @return A PackageBase object, else <b>null</b>.
+     * @throws InvalidFormatException
+     *             If the specified file doesn't exist, and a parsing error
+     *             occur.
+     */
+   public static OPCPackage open(Path path, PackageAccess access) throws InvalidFormatException {
+       if (Files.exists(path) && Files.isDirectory(path)) {
            throw new IllegalArgumentException("file must not be a directory");
        }
 
-       OPCPackage pack = new ZipPackage(file, access); //NOSONAR
+       OPCPackage pack = new ZipPackage(path, access);
        try {
            if (pack.partList == null && access != PackageAccess.WRITE) {
                pack.getParts();
            }
-           pack.originalPackagePath = file.getAbsolutePath();
+           pack.originalPackagePath = path;
            return pack;
        } catch (InvalidFormatException | RuntimeException e) {
            if (access == PackageAccess.READ) {
@@ -376,7 +390,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
 
         // Creates a new package
         OPCPackage pkg = new ZipPackage();
-        pkg.originalPackagePath = file.getAbsolutePath();
+        pkg.originalPackagePath = file.toPath();
 
         configurePackage(pkg);
         return pkg;
@@ -459,13 +473,10 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
             return;
         }
 
-        if (StringUtil.isNotBlank(this.originalPackagePath)) {
-            File targetFile = new File(this.originalPackagePath);
-            if (!targetFile.exists()
-                    || !(this.originalPackagePath
-                            .equalsIgnoreCase(targetFile.getAbsolutePath()))) {
+        if (this.originalPackagePath != null) {
+            if (!Files.exists(originalPackagePath)) {
                 // Case of a package created from scratch
-                save(targetFile);
+                save(originalPackagePath);
             } else {
                 closeImpl();
             }
@@ -1463,15 +1474,27 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
      * @see #save(OutputStream)
      */
     public void save(File targetFile) throws IOException {
-        if (targetFile == null) {
+        save(targetFile.toPath());
+    }
+
+    /**
+     * Save the document in the specified path.
+     *
+     * @param targetPath
+     *            Destination file.
+     * @throws IOException
+     *             Throws if an IO exception occur.
+     * @see #save(OutputStream)
+     */
+    public void save(Path targetPath) throws IOException {
+        if (targetPath == null) {
             throw new IllegalArgumentException("targetFile");
         }
 
         this.throwExceptionIfReadOnly();
 
         // You shouldn't save the same file, do a close instead
-        if(targetFile.exists() &&
-                targetFile.getAbsolutePath().equals(this.originalPackagePath)) {
+        if(Files.exists(targetPath) && Files.isSameFile(targetPath, originalPackagePath)) {
             throw new InvalidOperationException(
                     "You can't call save(File) to save to the currently open " +
                     "file. To save to the current file, please just call close()"
@@ -1479,8 +1502,8 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
         }
 
         // Do the save
-        try (FileOutputStream fos = new FileOutputStream(targetFile)) {
-            this.save(fos);
+        try (OutputStream outputStream = Files.newOutputStream(targetPath)) {
+            this.save(outputStream);
         }
     }
 
