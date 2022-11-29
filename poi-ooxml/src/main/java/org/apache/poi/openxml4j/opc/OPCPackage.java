@@ -285,7 +285,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
      * @param path
      *            The path of the file to open.
      * @param access
-     *            Type of access to the file that is allowed/
+     *            Type of access to the file that is allowed
      * @return A PackageBase object, else <b>null</b>.
      * @throws InvalidFormatException
      *             If the specified file doesn't exist, and a parsing error
