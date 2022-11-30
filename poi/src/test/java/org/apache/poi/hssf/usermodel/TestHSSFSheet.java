@@ -810,7 +810,7 @@ final class TestHSSFSheet extends BaseTestSheet {
             assertEquals(maxDrawingGroupId1 + 1, dm1.getDgg().getMaxDrawingGroupId());
 
             try (HSSFWorkbook wb2 = writeOutAndReadBack(wb1)) {
-                DrawingManager2 dm2 = wb1.getWorkbook().getDrawingManager();
+                DrawingManager2 dm2 = wb2.getWorkbook().getDrawingManager();
                 assertEquals(maxDrawingGroupId1 + 1, dm2.getDgg().getMaxDrawingGroupId());
 
                 HSSFSheet sheet2 = wb2.getSheetAt(1);

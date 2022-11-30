@@ -301,7 +301,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
            if (pack.partList == null && access != PackageAccess.WRITE) {
                pack.getParts();
            }
-           pack.originalPackagePath = path;
+           pack.originalPackagePath = path.toAbsolutePath();
            return pack;
        } catch (InvalidFormatException | RuntimeException e) {
            if (access == PackageAccess.READ) {
@@ -390,7 +390,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
 
         // Creates a new package
         OPCPackage pkg = new ZipPackage();
-        pkg.originalPackagePath = file.toPath();
+        pkg.originalPackagePath = file.getAbsoluteFile().toPath();
 
         configurePackage(pkg);
         return pkg;
@@ -1494,7 +1494,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
         this.throwExceptionIfReadOnly();
 
         // You shouldn't save the same file, do a close instead
-        if(Files.exists(targetPath) && Files.isSameFile(targetPath, originalPackagePath)) {
+        if (Files.exists(targetPath) && Files.isSameFile(targetPath.toAbsolutePath(), originalPackagePath)) {
             throw new InvalidOperationException(
                     "You can't call save(File) to save to the currently open " +
                     "file. To save to the current file, please just call close()"

@@ -22,11 +22,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.EnumSet;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipEncodingHelper;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -150,7 +150,7 @@ public class ZipSecureFile extends ZipFile {
     }
 
     public ZipSecureFile(String name) throws IOException {
-        this(new File(name));
+        this(Paths.get(name));
     }
 
     /**
@@ -167,7 +167,6 @@ public class ZipSecureFile extends ZipFile {
      * @throws IllegalStateException if the zip file has been closed
      */
     @Override
-    @SuppressWarnings("resource")
     public ZipArchiveThresholdInputStream getInputStream(ZipArchiveEntry entry) throws IOException {
         ZipArchiveThresholdInputStream zatis = new ZipArchiveThresholdInputStream(super.getInputStream(entry));
         zatis.setEntry(entry);
