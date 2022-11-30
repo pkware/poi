@@ -260,7 +260,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
             }
         }
 
-        pack.originalPackagePath = Paths.get(path);
+        pack.originalPackagePath = Paths.get(path).toAbsolutePath();
         return pack;
     }
 
