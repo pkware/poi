@@ -27,15 +27,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Spliterator;
-
 import javax.xml.namespace.QName;
-
 import org.apache.commons.io.output.UnsynchronizedByteArrayOutputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +67,7 @@ import org.apache.xmlbeans.XmlCursor;
 import org.apache.xmlbeans.XmlException;
 import org.apache.xmlbeans.XmlObject;
 import org.apache.xmlbeans.XmlOptions;
+import org.openxmlformats.schemas.drawingml.x2006.main.ThemeDocument;
 import org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STOnOff1;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBody;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTDocument1;
@@ -96,7 +98,7 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.StylesDocument;
  * XML structure come through. You'll therefore almost
  * certainly need to refer to the OOXML specifications
  * from
- * http://www.ecma-international.org/publications/standards/Ecma-376.htm
+ * https://www.ecma-international.org/publications/standards/Ecma-376.htm
  * at some point in your use.
  */
 @SuppressWarnings("unused")
@@ -115,6 +117,7 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
     protected XWPFEndnotes endnotes;
     protected XWPFNumbering numbering;
     protected XWPFStyles styles;
+    protected XWPFTheme theme;
     protected XWPFFootnotes footnotes;
     private CTDocument1 ctDocument;
     private XWPFSettings settings;
@@ -241,6 +244,9 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
                 if (relation.equals(XWPFRelation.STYLES.getRelation())) {
                     this.styles = (XWPFStyles) p;
                     this.styles.onDocumentRead();
+                } else if (relation.equals(XWPFRelation.THEME.getRelation())) {
+                    this.theme = (XWPFTheme) p;
+                    this.theme.onDocumentRead();
                 } else if (relation.equals(XWPFRelation.NUMBERING.getRelation())) {
                     this.numbering = (XWPFNumbering) p;
                     this.numbering.onDocumentRead();
@@ -458,6 +464,14 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
         return footnotes.getFootnotesList();
     }
 
+    /**
+     * @return Theme document (can be null)
+     * @since POI 5.2.4
+     */
+    public XWPFTheme getTheme() {
+        return theme;
+    }
+
     public XWPFHyperlink[] getHyperlinks() {
         return hyperlinks.toArray(new XWPFHyperlink[0]);
     }
@@ -568,8 +582,8 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
     private CTSectPr getSection() {
         CTBody ctBody = getDocument().getBody();
         return (ctBody.isSetSectPr() ?
-                ctBody.getSectPr() :
-                ctBody.addNewSectPr());
+            ctBody.getSectPr() :
+            ctBody.addNewSectPr());
     }
 
     /**
@@ -678,25 +692,82 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
      *
      * @param cursor The cursor-position where the new paragraph should be added.
      * @return the {@link XWPFParagraph} object representing the newly inserted
-     * CTP object
+     * CTP object.
      */
     @Override
     public XWPFParagraph insertNewParagraph(XmlCursor cursor) {
-        if (isCursorInBody(cursor)) {
-            String uri = CTP.type.getName().getNamespaceURI();
-            /*
-             * TODO DO not use a coded constant, find the constant in the OOXML
-             * classes instead, as the child of type CT_Paragraph is defined in the
-             * OOXML schema as 'p'
-             */
-            String localPart = "p";
-            // creates a new Paragraph, cursor is positioned inside the new
-            // element
-            cursor.beginElement(localPart, uri);
-            // move the cursor to the START token to the paragraph just created
-            cursor.toParent();
-            CTP p = (CTP) cursor.getObject();
-            XWPFParagraph newP = new XWPFParagraph(p, this);
+        Deque<XmlObject> path = getPathToObject(cursor);
+        String uri = CTP.type.getName().getNamespaceURI();
+        /*
+         * TODO DO not use a coded constant, find the constant in the OOXML
+         * classes instead, as the child of type CT_Paragraph is defined in the
+         * OOXML schema as 'p'
+         */
+        String localPart = "p";
+        // creates a new Paragraph, cursor is positioned inside the new
+        // element
+        cursor.beginElement(localPart, uri);
+        // move the cursor to the START token to the paragraph just created
+        cursor.toParent();
+        CTP p = (CTP) cursor.getObject();
+        XWPFParagraph newP = new XWPFParagraph(p, this);
+        insertIntoParentElement(newP, path);
+        cursor.toCursor(newP.getCTP().newCursor());
+        cursor.toEndToken();
+        return newP;
+    }
+
+    @Override
+    public XWPFTable insertNewTbl(XmlCursor cursor) {
+        Deque<XmlObject> path = getPathToObject(cursor);
+        String uri = CTTbl.type.getName().getNamespaceURI();
+        String localPart = "tbl";
+        cursor.beginElement(localPart, uri);
+        cursor.toParent();
+        CTTbl t = (CTTbl) cursor.getObject();
+        XWPFTable newT = new XWPFTable(t, this);
+        insertIntoParentElement(newT, path);
+        cursor.toCursor(newT.getCTTbl().newCursor());
+        cursor.toEndToken();
+        return newT;
+    }
+
+    private Deque<XmlObject> getPathToObject(XmlCursor cursor) {
+        Deque<XmlObject> searchPath = new LinkedList<>();
+        try (XmlCursor verify = cursor.newCursor()) {
+            while (verify.toParent() && searchPath.peekFirst() != this.ctDocument.getBody()) {
+                searchPath.addFirst(verify.getObject());
+            }
+        }
+        return searchPath;
+    }
+
+    private void insertIntoParentElement(IBodyElement iBodyElement, Deque<XmlObject> path) {
+        XmlObject firstObject = path.pop();
+        if (path.isEmpty()) {
+            if (iBodyElement instanceof XWPFParagraph) {
+                insertIntoParagraphsAndElements((XWPFParagraph) iBodyElement, paragraphs, bodyElements);
+            } else if (iBodyElement instanceof XWPFTable) {
+                insertIntoTablesAndElements((XWPFTable) iBodyElement, tables, bodyElements);
+            }
+        } else {
+            CTTbl ctTbl = (CTTbl) path.pop(); //first object is always the body, we want the second one
+            for (XWPFTable xwpfTable : tables) {
+                if (ctTbl == xwpfTable.getCTTbl()) {
+                    insertElementIntoTable(xwpfTable, iBodyElement, path);
+                }
+            }
+        }
+    }
+
+    private void insertIntoParagraphsAndElements(XWPFParagraph newP, List<XWPFParagraph> paragraphs, List<IBodyElement> bodyElements) {
+        insertIntoParagraphs(newP, paragraphs);
+        insertIntoBodyElements(newP, bodyElements);
+    }
+
+    private void insertIntoParagraphs(XWPFParagraph newP, List<XWPFParagraph> paragraphs) {
+        try (XmlCursor cursor = newP.getCTP().newCursor()) {
+            XmlObject p = cursor.getObject();
             XmlObject o = null;
             /*
              * move the cursor to the previous element until a) the next
@@ -719,77 +790,108 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
                 int pos = paragraphs.indexOf(getParagraph((CTP) o)) + 1;
                 paragraphs.add(pos, newP);
             }
-
-            /*
-             * create a new cursor, that points to the START token of the just
-             * inserted paragraph
-             */
-            try (XmlCursor newParaPos = p.newCursor()) {
-                /*
-                 * Calculate the paragraphs index in the list of all body
-                 * elements
-                 */
-                int i = 0;
-                cursor.toCursor(newParaPos);
-                while (cursor.toPrevSibling()) {
-                    o = cursor.getObject();
-                    if (o instanceof CTP || o instanceof CTTbl) {
-                        i++;
-                    }
-                }
-                bodyElements.add(i, newP);
-                cursor.toCursor(newParaPos);
-                cursor.toEndToken();
-                return newP;
-            }
         }
-        return null;
     }
 
-    @Override
-    public XWPFTable insertNewTbl(XmlCursor cursor) {
-        if (isCursorInBody(cursor)) {
-            String uri = CTTbl.type.getName().getNamespaceURI();
-            String localPart = "tbl";
-            cursor.beginElement(localPart, uri);
-            cursor.toParent();
-            CTTbl t = (CTTbl) cursor.getObject();
-            XWPFTable newT = new XWPFTable(t, this);
+    private void insertIntoTablesAndElements(XWPFTable newT, List<XWPFTable> tables, List<IBodyElement> bodyElements) {
+        insertIntoTables(newT, tables);
+        insertIntoBodyElements(newT, bodyElements);
+    }
+
+    private void insertIntoTables(XWPFTable newT, List<XWPFTable> tables) {
+        try (XmlCursor cursor = newT.getCTTbl().newCursor()) {
+            XmlObject p = cursor.getObject();
             XmlObject o = null;
+            /*
+             * move the cursor to the previous element until a) the next
+             * paragraph is found or b) all elements have been passed
+             */
             while (!(o instanceof CTTbl) && (cursor.toPrevSibling())) {
                 o = cursor.getObject();
             }
+            /*
+             * if the object that has been found is a) not a paragraph or b) is
+             * the paragraph that has just been inserted, as the cursor in the
+             * while loop above was not moved as there were no other siblings,
+             * then the paragraph that was just inserted is the first paragraph
+             * in the body. Otherwise, take the previous paragraph and calculate
+             * the new index for the new paragraph.
+             */
             if (!(o instanceof CTTbl)) {
                 tables.add(0, newT);
             } else {
                 int pos = tables.indexOf(getTable((CTTbl) o)) + 1;
                 tables.add(pos, newT);
             }
-            int i = 0;
-            try (XmlCursor tableCursor = t.newCursor()) {
-                cursor.toCursor(tableCursor);
-                while (cursor.toPrevSibling()) {
-                    o = cursor.getObject();
-                    if (o instanceof CTP || o instanceof CTTbl) {
-                        i++;
-                    }
-                }
-                bodyElements.add(i, newT);
-                cursor.toCursor(tableCursor);
-                cursor.toEndToken();
-                return newT;
-            }
         }
-        return null;
     }
 
-    /**
-     * verifies that cursor is on the right position
-     */
-    private boolean isCursorInBody(XmlCursor cursor) {
-        try (XmlCursor verify = cursor.newCursor()) {
-            verify.toParent();
-            return (verify.getObject() == this.ctDocument.getBody());
+    private void insertIntoBodyElements(IBodyElement iBodyElement, List<IBodyElement> bodyElements) {
+        /*
+         * create a new cursor, that points to the START token of the just
+         * inserted paragraph
+         */
+        try (XmlCursor cursor = getNewCursor(iBodyElement).orElseThrow(NoSuchElementException::new);
+             XmlCursor newParaPos = getNewCursor(iBodyElement).orElseThrow(NoSuchElementException::new)) {
+            XmlObject o;
+            /*
+             * Calculate the paragraphs index in the list of all body
+             * elements
+             */
+            int i = 0;
+            cursor.toCursor(newParaPos);
+            while (cursor.toPrevSibling()) {
+                o = cursor.getObject();
+                if (o instanceof CTP || o instanceof CTTbl) {
+                    i++;
+                }
+            }
+            bodyElements.add(i, iBodyElement);
+            cursor.toCursor(newParaPos);
+            cursor.toEndToken();
+        } catch (NoSuchElementException ignored) {
+            //We could not open a cursor to the ibody element
+        }
+    }
+
+    private Optional<XmlCursor> getNewCursor(IBodyElement iBodyElement) {
+        if (iBodyElement instanceof XWPFParagraph) {
+            return Optional.ofNullable(((XWPFParagraph) iBodyElement).getCTP().newCursor());
+        } else if (iBodyElement instanceof XWPFTable) {
+            return Optional.ofNullable(((XWPFTable) iBodyElement).getCTTbl().newCursor());
+        }
+        return Optional.empty();
+    }
+
+
+    private void insertElementIntoTable(XWPFTable xwpfTable, IBodyElement iBodyElement, Deque<XmlObject> path) {
+        CTRow row = (CTRow) path.pop();
+        for (XWPFTableRow tableRow : xwpfTable.getRows()) {
+            if (tableRow.getCtRow() == row) {
+                insertElementIntoRow(tableRow, iBodyElement, path);
+            }
+        }
+    }
+
+    private void insertElementIntoRow(XWPFTableRow tableRow, IBodyElement iBodyElement, Deque<XmlObject> path) {
+        CTTc cell = (CTTc) path.pop();
+        for (XWPFTableCell tableCell : tableRow.getTableCells()) {
+            if (tableCell.getCTTc() == cell) {
+                insertElementIntoCell(tableCell, iBodyElement, path);
+            }
+        }
+    }
+
+    private void insertElementIntoCell(XWPFTableCell tableCell, IBodyElement iBodyElement, Deque<XmlObject> path) {
+        if (path.isEmpty()) {
+            if (iBodyElement instanceof XWPFParagraph) {
+                insertIntoParagraphsAndElements((XWPFParagraph) iBodyElement, tableCell.paragraphs, tableCell.bodyElements);
+            }  else if (iBodyElement instanceof XWPFTable) {
+                insertIntoTablesAndElements((XWPFTable) iBodyElement, tableCell.tables, tableCell.bodyElements);
+            }
+        } else {
+            // another table
+            insertElementIntoTable((XWPFTable) path.pop(), iBodyElement, path);
         }
     }
 
@@ -927,6 +1029,28 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
         }
 
         return styles;
+    }
+
+
+    /**
+     * Creates an empty styles for the document if one does not already exist
+     *
+     * @return styles
+     * @since POI 5.2.4
+     */
+    public XWPFTheme createTheme() {
+        if (theme == null) {
+            ThemeDocument themeDoc = ThemeDocument.Factory.newInstance();
+
+            XWPFRelation relation = XWPFRelation.THEME;
+            int i = getRelationIndex(relation);
+
+            XWPFTheme wrapper = (XWPFTheme) createRelationship(relation, XWPFFactory.getInstance(), i);
+            wrapper.setTheme(themeDoc.addNewTheme());
+            theme = wrapper;
+        }
+
+        return theme;
     }
 
     /**
@@ -1795,7 +1919,7 @@ public class XWPFDocument extends POIXMLDocument implements Document, IBody {
 
         //create relationship in document for new chart
         RelationPart rp = createRelationship(
-                XWPFRelation.CHART, XWPFFactory.getInstance(), chartNumber, false);
+            XWPFRelation.CHART, XWPFFactory.getInstance(), chartNumber, false);
 
         // initialize xwpfchart object
         XWPFChart xwpfChart = rp.getDocumentPart();

@@ -136,8 +136,8 @@ dependencies {
     testRuntimeOnly "org.apiguardian:apiguardian-api:${apiGuardianVersion}"
     testImplementation 'org.xmlunit:xmlunit-core:2.9.0'
     testImplementation 'org.reflections:reflections:0.10.2'
-    testImplementation 'org.openjdk.jmh:jmh-core:1.35'
-    testImplementation 'org.openjdk.jmh:jmh-generator-annprocess:1.35'
+    testImplementation 'org.openjdk.jmh:jmh-core:1.36'
+    testImplementation 'org.openjdk.jmh:jmh-generator-annprocess:1.36'
     testImplementation 'com.google.guava:guava:31.1-jre'
     testImplementation 'org.tukaani:xz:1.9'
     testImplementation 'com.github.rzymek:opczip:1.2.0'
@@ -145,7 +145,7 @@ dependencies {
     // prevent slf4j warnings coming from xmlsec -> slf4j-api 1.7.x dependency
     // see https://logging.apache.org/log4j/2.x/log4j-slf4j-impl/
     testImplementation "org.apache.logging.log4j:log4j-slf4j2-impl:${log4jVersion}"
-    testImplementation 'org.slf4j:slf4j-simple:2.0.2'
+    testImplementation 'org.slf4j:slf4j-simple:2.0.5'
 
     if (SAXON_TEST) {
         testRuntimeOnly "net.sf.saxon:Saxon-HE:${saxonVersion}"
@@ -173,7 +173,7 @@ final String OOXML_LITE_REPORT = '../src/resources/ooxml-lite-report'
 final String OOXML_LITE_INCLUDES = "^(com/microsoft/schemas|org/(etsi|openxmlformats|w3/)|org/apache/poi/schemas)"
 
 compileJava {
-    dependsOn 'fixBatik'
+    dependsOn 'fixBatik', 'cleanupBatik'
 }
 
 task compileJava9(type: JavaCompile) {
@@ -207,7 +207,7 @@ task compileTest9(type: JavaCompile) {
     dependsOn 'compileTestJava', ':poi:testJar'
 
     javaCompiler = javaToolchains.compilerFor {
-        languageVersion = JavaLanguageVersion.of(jdkVersion >= 17 ? 17 : 11)
+        languageVersion = JavaLanguageVersion.of(jdkVersion)
         if (jdkVendor != '') vendor = JvmVendorSpec.matching(jdkVendor)
     }
     destinationDirectory = file(TEST9_OUT + VERSIONS9)
@@ -275,6 +275,14 @@ task fixBatik(type: Zip) {
     from zipTree(configurations.broken.files.find{ f -> f.name.startsWith("batik-script") })
     filesMatching("**/org.apache.batik.script.InterpreterFactory") {
         it.filter{ it2 -> it2.contains("Rhino") ? "#" + it2 : it2 }
+    }
+}
+
+task cleanupBatik(type: Delete) {
+    // remove older files to avoid build failures because of duplicate modules
+    delete fileTree("${buildDir}/brokenJars/").matching {
+        include "*.jar"
+        exclude "batik*-${batikVersion}.jar"
     }
 }
 

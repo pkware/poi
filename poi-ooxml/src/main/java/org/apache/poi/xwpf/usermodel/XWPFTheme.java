@@ -14,20 +14,14 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 ==================================================================== */
-package org.apache.poi.xslf.usermodel;
 
-import static org.apache.poi.ooxml.POIXMLTypeLoader.DEFAULT_XML_OPTIONS;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-
-import javax.xml.namespace.QName;
+package org.apache.poi.xwpf.usermodel;
 
 import org.apache.poi.ooxml.POIXMLDocumentPart;
+import org.apache.poi.ooxml.POIXMLException;
 import org.apache.poi.openxml4j.opc.PackagePart;
-import org.apache.poi.util.Beta;
 import org.apache.poi.util.Internal;
+import org.apache.poi.xslf.usermodel.XSLFTheme;
 import org.apache.xmlbeans.XmlException;
 import org.apache.xmlbeans.XmlOptions;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTBaseStyles;
@@ -35,27 +29,37 @@ import org.openxmlformats.schemas.drawingml.x2006.main.CTColor;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTColorScheme;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTOfficeStyleSheet;
 import org.openxmlformats.schemas.drawingml.x2006.main.ThemeDocument;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.*;
+
+import javax.xml.namespace.QName;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import static org.apache.poi.ooxml.POIXMLTypeLoader.DEFAULT_XML_OPTIONS;
 
 /**
- * A shared style sheet in a .pptx slide show
+ * A shared style sheet in a .docx document
+ *
+ * @since POI 5.2.4
  */
-@Beta
-public class XSLFTheme extends POIXMLDocumentPart {
+public class XWPFTheme extends POIXMLDocumentPart {
     private CTOfficeStyleSheet _theme;
 
-    XSLFTheme() {
-        _theme = CTOfficeStyleSheet.Factory.newInstance();
+    /**
+     * Construct XWPFStyles from a package part
+     *
+     * @param part the package part holding the data of the styles
+     */
+    public XWPFTheme(PackagePart part) {
+        super(part);
     }
 
     /**
-     * @since POI 3.14-Beta1
+     * Construct XWPFStyles from scratch for a new document.
      */
-    public XSLFTheme(PackagePart part) throws IOException, XmlException {
-        super(part);
-        try (InputStream stream = getPackagePart().getInputStream()) {
-            ThemeDocument doc = ThemeDocument.Factory.parse(stream, DEFAULT_XML_OPTIONS);
-            _theme = doc.getTheme();
-        }
+    public XWPFTheme() {
+        _theme = CTOfficeStyleSheet.Factory.newInstance();
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -128,26 +132,6 @@ public class XSLFTheme extends POIXMLDocumentPart {
     }
 
     /**
-     * While developing only!
-     */
-    @Internal
-    public CTOfficeStyleSheet getXmlObject() {
-        return _theme;
-    }
-
-    @Override
-    protected final void commit() throws IOException {
-        XmlOptions xmlOptions = new XmlOptions(DEFAULT_XML_OPTIONS);
-        xmlOptions.setSaveSyntheticDocumentElement(
-            new QName(XSLFRelation.NS_DRAWINGML, "theme"));
-
-        PackagePart part = getPackagePart();
-        try (OutputStream out = part.getOutputStream()) {
-            getXmlObject().save(out, xmlOptions);
-        }
-    }
-
-    /**
      * @return typeface of the major font to use in a document.
      * Typically, the major font is used for heading areas of a document.
      *
@@ -165,5 +149,37 @@ public class XSLFTheme extends POIXMLDocumentPart {
     @SuppressWarnings("WeakerAccess")
     public String getMinorFont(){
         return _theme.getThemeElements().getFontScheme().getMinorFont().getLatin().getTypeface();
+    }
+
+    /**
+     * Read document
+     */
+    @Override
+    protected void onDocumentRead() throws IOException {
+        ThemeDocument themeDoc;
+        try (InputStream is = getPackagePart().getInputStream()) {
+            themeDoc = ThemeDocument.Factory.parse(is, DEFAULT_XML_OPTIONS);
+            setTheme(themeDoc.getTheme());
+        } catch (XmlException e) {
+            throw new POIXMLException("Unable to read theme", e);
+        }
+    }
+
+    @Override
+    protected void commit() throws IOException {
+        if (_theme == null) {
+            throw new IOException("Unable to write out theme that was never read in!");
+        }
+
+        XmlOptions xmlOptions = new XmlOptions(DEFAULT_XML_OPTIONS);
+        xmlOptions.setSaveSyntheticDocumentElement(new QName(XWPFRelation.NS_DRAWINGML, "theme"));
+        PackagePart part = getPackagePart();
+        try (OutputStream out = part.getOutputStream()) {
+            _theme.save(out, xmlOptions);
+        }
+    }
+
+    public void setTheme(CTOfficeStyleSheet theme) {
+        _theme = theme;
     }
 }

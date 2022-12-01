@@ -49,10 +49,11 @@ def poijobs = [
         ],
         [ name: 'POI-DSL-1.17', jdk: '1.17', trigger: 'H */12 * * *', skipcigame: true
         ],
-        [ name: 'POI-DSL-1.18', jdk: '1.18', trigger: triggerSundays, skipcigame: true
+        // Jenkins on ci-builds.apache.org does not support spotbugs with a new enough version of asm for Java18+
+        [ name: 'POI-DSL-1.18', jdk: '1.18', trigger: triggerSundays, skipcigame: true, skipSpotbugs: true
         ],
-        // Use Ant build for as Gradle 7.5 does not support Java 19 yet (change to gradle: true when we have Gradle support)
-        [ name: 'POI-DSL-1.19', jdk: '1.19', trigger: triggerSundays, skipcigame: true, useAnt: true
+        // Jenkins on ci-builds.apache.org does not support spotbugs with a new enough version of asm for Java18+
+        [ name: 'POI-DSL-1.19', jdk: '1.19', trigger: triggerSundays, skipcigame: true, skipSpotbugs: true
         ],
         // Use Ant-build for now as selecting IBM JDK via toolchain does not work (yet)
         [ name: 'POI-DSL-IBM-JDK', jdk: 'IBMJDK', trigger: triggerSundays, skipcigame: true, useAnt: true
@@ -105,7 +106,8 @@ def poijobs = [
         ],
         [ name: 'POI-DSL-Windows-1.17', jdk: '1.17', trigger: 'H */12 * * *', windows: true, slaves: 'Windows', skipcigame: true
         ],
-        [ name: 'POI-DSL-Windows-1.18', jdk: '1.18', trigger: triggerSundays, windows: true, slaves: 'Windows', skipcigame: true
+        [ name: 'POI-DSL-Windows-1.18', jdk: '1.18', trigger: triggerSundays, windows: true, slaves: 'Windows', skipcigame: true,
+          skipSpotbugs: true
         ],
         [ name: 'POI-DSL-Github-PullRequests', trigger: '', githubpr: true, skipcigame: true,
           // ensure the file which is needed from the separate documentation module does exist
@@ -146,8 +148,8 @@ def defaultSlaves = '(ubuntu)&&!beam&&!cloud-slave&&!H29'
 
 def jdkMapping = [
         '1.8': [ jenkinsJdk: 'jdk_1.8_latest', jdkVersion: 8, jdkVendor: 'oracle' ],
-        '1.10': [ jenkinsJdk: 'jdk_10_latest', jdkVersion: 10, jdkVendor: 'oracle' ],
-        '1.11': [ jenkinsJdk: 'jdk_11_latest', jdkVersion: 11, jdkVendor: 'oracle' ],
+        '1.10': [ jenkinsJdk: 'jdk_10_latest', jdkVersion: 10, jdkVendor: '' ],
+        '1.11': [ jenkinsJdk: 'jdk_11_latest', jdkVersion: 11, jdkVendor: '' ],
         '1.12': [ jenkinsJdk: 'jdk_12_latest', jdkVersion: 12, jdkVendor: '' ],
         '1.13': [ jenkinsJdk: 'jdk_13_latest', jdkVersion: 13, jdkVendor: '' ],
         '1.14': [ jenkinsJdk: 'jdk_14_latest', jdkVersion: 14, jdkVendor: '' ],
@@ -468,11 +470,13 @@ poijobs.each { poijob ->
                 }
             }
             publishers {
-                recordIssues {
-                    tools {
-                        spotBugs {
-                            pattern('*/build/reports/spotbugs/*.xml')
-                            reportEncoding('UTF-8')
+                if (!poijob.skipSpotbugs) {
+                    recordIssues {
+                        tools {
+                            spotBugs {
+                                pattern('*/build/reports/spotbugs/*.xml')
+                                reportEncoding('UTF-8')
+                            }
                         }
                     }
                 }
@@ -486,11 +490,13 @@ poijobs.each { poijob ->
                         publishTestStabilityData()
                     }
                 }
-                jacocoCodeCoverage {
-                    classPattern('*/build/classes')
-                    execPattern('*/build/*.exec,*/build/jacoco/*.exec')
-                    sourcePattern('*/src/main/java')
-                    exclusionPattern('com/microsoft/**,org/openxmlformats/**,org/etsi/**,org/w3/**,schemaorg*/**,schemasMicrosoft*/**,org/apache/poi/hdf/model/hdftypes/definitions/*.class,org/apache/poi/hwpf/model/types/*.class,org/apache/poi/hssf/usermodel/DummyGraphics2d.class,org/apache/poi/sl/draw/binding/*.class')
+                if (!poijob.skipSpotbugs) {
+                    jacocoCodeCoverage {
+                        classPattern('*/build/classes')
+                        execPattern('*/build/*.exec,*/build/jacoco/*.exec')
+                        sourcePattern('*/src/main/java')
+                        exclusionPattern('com/microsoft/**,org/openxmlformats/**,org/etsi/**,org/w3/**,schemaorg*/**,schemasMicrosoft*/**,org/apache/poi/hdf/model/hdftypes/definitions/*.class,org/apache/poi/hwpf/model/types/*.class,org/apache/poi/hssf/usermodel/DummyGraphics2d.class,org/apache/poi/sl/draw/binding/*.class')
+                    }
                 }
 
                 if (!poijob.skipcigame) {
@@ -656,9 +662,9 @@ Unfortunately we often see builds break because of changes/new machines...''')
     axes {
         jdk(
                 'jdk_1.8_latest',
-                'jdk_10_latest',
                 'jdk_11_latest',
                 /* don't look for JDKs that are out of support
+                'jdk_10_latest',
                 'jdk_12_latest',
                 'jdk_13_latest',
                 'jdk_14_latest',

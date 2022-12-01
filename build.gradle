@@ -27,10 +27,6 @@ buildscript {
         maven { url 'https://plugins.gradle.org/m2/' }
         mavenCentral()
     }
-
-    dependencies {
-        classpath 'org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:3.4.0.2513'
-    }
 }
 
 plugins {
@@ -38,41 +34,15 @@ plugins {
     id 'com.dorongold.task-tree' version '2.1.0'
     id 'org.nosphere.apache.rat' version '0.8.0'
     id 'distribution'
-    id "com.github.spotbugs" version '5.0.12'
-    id 'de.thetaphi.forbiddenapis' version '3.3'
-    id 'com.github.jk1.dependency-license-report' version '2.0'
-    id 'org.cyclonedx.bom' version '1.7.1'
+    id "com.github.spotbugs" version '5.0.13'
+    id 'de.thetaphi.forbiddenapis' version '3.4'
+    id 'org.cyclonedx.bom' version '1.7.2'
+    id 'org.sonarqube' version "3.5.0.2730"
 }
 
 repositories {
     mavenCentral()
     //maven { url 'https://repository.apache.org/content/repositories/staging' }
-}
-
-import com.github.jk1.license.render.*
-import com.github.jk1.license.importer.*
-
-licenseReport {
-
-    // Select projects to examine for dependencies.
-    // Defaults to current project and all its subprojects
-    projects = [project] + project.subprojects
-
-    // Adjust the configurations to fetch dependencies, e.g. for Android projects. Default is 'runtimeClasspath'
-    configurations = ['runtimeClasspath']
-    // Use 'ALL' to dynamically resolve all configurations:
-    // configurations = ALL
-
-    // Don't include artifacts of project's own group into the report
-    excludeOwnGroup = true
-
-    // Don't exclude bom dependencies.
-    // If set to true, then all boms will be excluded from the report
-    excludeBoms = false
-
-    // Set custom report renderer, implementing ReportRenderer.
-    // Yes, you can write your own to support any format necessary.
-    renderers = [new XmlReportRenderer('third-party-libs.xml', 'Back-End Libraries')]
 }
 
 // Only add the plugin for Sonar if enabled
@@ -146,17 +116,17 @@ subprojects {
     ext {
         bouncyCastleVersion = '1.70'
         commonsCodecVersion = '1.15'
-        commonsCompressVersion = '1.21'
+        commonsCompressVersion = '1.22'
         commonsIoVersion = '2.11.0'
         commonsMathVersion = '3.6.1'
         junitVersion = '5.9.0'
         log4jVersion = '2.19.0'
-        mockitoVersion = '4.8.0'
+        mockitoVersion = '4.9.0'
         hamcrestVersion = '2.2'
         xmlbeansVersion = '5.1.1'
-        batikVersion = '1.15'
+        batikVersion = '1.16'
         graphics2dVersion = '0.41'
-        pdfboxVersion = '2.0.26'
+        pdfboxVersion = '2.0.27'
         saxonVersion = '11.4'
         apiGuardianVersion = '1.1.2'
 
@@ -178,8 +148,8 @@ subprojects {
         all {
             resolutionStrategy {
                 force "commons-io:commons-io:${commonsIoVersion}"
-                force 'org.slf4j:slf4j-api:2.0.2'
-                force 'com.fasterxml.woodstox:woodstox-core:6.3.1'
+                force 'org.slf4j:slf4j-api:2.0.5'
+                force 'com.fasterxml.woodstox:woodstox-core:6.4.0'
             }
         }
     }
@@ -216,12 +186,12 @@ subprojects {
         failOnError = true
         maxMemory = "1024M"
         javadocTool = javaToolchains.javadocToolFor {
-            languageVersion = JavaLanguageVersion.of(jdkVersion >= 17 ? 17 : 11)
+            languageVersion = JavaLanguageVersion.of(jdkVersion)
         }
 
         doFirst {
             options {
-                addBooleanOption('html5', true)
+                if (jdkVersion > 8) addBooleanOption('html5', true)
                 addBooleanOption('Xdoclint:all,-missing', true)
                 links 'https://poi.apache.org/apidocs/dev/'
                 links 'https://docs.oracle.com/javase/8/docs/api/'
