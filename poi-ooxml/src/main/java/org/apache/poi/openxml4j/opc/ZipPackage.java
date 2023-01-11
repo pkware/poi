@@ -27,7 +27,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -52,7 +51,6 @@ import org.apache.poi.openxml4j.util.ZipEntrySource;
 import org.apache.poi.openxml4j.util.ZipFileZipEntrySource;
 import org.apache.poi.openxml4j.util.ZipInputStreamZipEntrySource;
 import org.apache.poi.util.IOUtils;
-import org.apache.poi.util.TempFile;
 
 /**
  * Physical zip package.
@@ -62,6 +60,7 @@ public final class ZipPackage extends OPCPackage {
     private static final String SETTINGS_XML = "settings.xml";
     private static boolean useTempFilePackageParts = false;
     private static boolean encryptTempFilePackageParts = false;
+    private static boolean bufferTempFilePackageParts = false;
 
     private static final Logger LOG = LogManager.getLogger(ZipPackage.class);
 
@@ -86,6 +85,13 @@ public final class ZipPackage extends OPCPackage {
     }
 
     /**
+     * @param bufferTempFiles whether to buffer package part temp files
+     */
+    public static void setBufferTempFilePackageParts(boolean bufferTempFiles) {
+        bufferTempFilePackageParts = bufferTempFiles;
+    }
+
+    /**
      * @return whether package part data is stored in temp files to save memory
      */
     public static boolean useTempFilePackageParts() {
@@ -97,6 +103,13 @@ public final class ZipPackage extends OPCPackage {
      */
     public static boolean encryptTempFilePackageParts() {
         return encryptTempFilePackageParts;
+    }
+
+    /**
+     * @return whether package part temp files are buffered
+     */
+    public static boolean bufferTempFilePackageParts() {
+        return bufferTempFilePackageParts;
     }
 
     /**
@@ -422,8 +435,16 @@ public final class ZipPackage extends OPCPackage {
         try {
             if (useTempFilePackageParts) {
                 if (encryptTempFilePackageParts) {
-                    return new EncryptedTempFilePackagePart(this, partName, contentType, loadRelationships);
-                } else {
+                    if (bufferTempFilePackageParts) {
+                        return new BufferedEncryptedTempFilePackagePart(this, partName, contentType, loadRelationships);
+                    } else {
+                        return new EncryptedTempFilePackagePart(this, partName, contentType, loadRelationships);
+                    }
+                }
+                else if (bufferTempFilePackageParts) {
+                    return new BufferedTempFilePackagePart(this, partName, contentType, loadRelationships);
+                }
+                else {
                     return new TempFilePackagePart(this, partName, contentType, loadRelationships);
                 }
             } else {

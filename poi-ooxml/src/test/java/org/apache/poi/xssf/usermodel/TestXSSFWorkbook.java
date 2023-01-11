@@ -1243,9 +1243,11 @@ public final class TestXSSFWorkbook extends BaseTestXWorkbook {
         try(UnsynchronizedByteArrayOutputStream bos = new UnsynchronizedByteArrayOutputStream()) {
             assertFalse(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts defaults to false?");
             assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts defaults to false?");
             ZipPackage.setUseTempFilePackageParts(true);
             assertTrue(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts was modified?");
             assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts was not modified?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts was not modified?");
             try (XSSFWorkbook workbook = new XSSFWorkbook()) {
                 XSSFSheet sheet = workbook.createSheet("sheet1");
                 XSSFRow row = sheet.createRow(0);
@@ -1267,10 +1269,12 @@ public final class TestXSSFWorkbook extends BaseTestXWorkbook {
         try(UnsynchronizedByteArrayOutputStream bos = new UnsynchronizedByteArrayOutputStream()) {
             assertFalse(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts defaults to false?");
             assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts defaults to false?");
             ZipPackage.setUseTempFilePackageParts(true);
             ZipPackage.setEncryptTempFilePackageParts(true);
             assertTrue(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts was modified?");
             assertTrue(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts was modified?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts was not modified?");
             try (XSSFWorkbook workbook = new XSSFWorkbook()) {
                 XSSFSheet sheet = workbook.createSheet("sheet1");
                 XSSFRow row = sheet.createRow(0);
@@ -1284,6 +1288,64 @@ public final class TestXSSFWorkbook extends BaseTestXWorkbook {
             } finally {
                 ZipPackage.setUseTempFilePackageParts(false);
                 ZipPackage.setEncryptTempFilePackageParts(false);
+            }
+        }
+    }
+
+    @Test
+    void testNewWorkbookWithBufferedEncryptedTempFilePackageParts() throws Exception {
+        try(UnsynchronizedByteArrayOutputStream bos = new UnsynchronizedByteArrayOutputStream()) {
+            assertFalse(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts defaults to false?");
+            ZipPackage.setUseTempFilePackageParts(true);
+            ZipPackage.setEncryptTempFilePackageParts(true);
+            ZipPackage.setBufferTempFilePackageParts(true);
+            assertTrue(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts was modified?");
+            assertTrue(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts was modified?");
+            assertTrue(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts was modified?");
+            try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+                XSSFSheet sheet = workbook.createSheet("sheet1");
+                XSSFRow row = sheet.createRow(0);
+                XSSFCell cell0 = row.createCell(0);
+                cell0.setCellValue("");
+                XSSFCell cell1 = row.createCell(1);
+                cell1.setCellErrorValue(FormulaError.DIV0);
+                XSSFCell cell2 = row.createCell(2);
+                cell2.setCellErrorValue(FormulaError.FUNCTION_NOT_IMPLEMENTED);
+                workbook.write(bos);
+            } finally {
+                ZipPackage.setUseTempFilePackageParts(false);
+                ZipPackage.setEncryptTempFilePackageParts(false);
+                ZipPackage.setBufferTempFilePackageParts(false);
+            }
+        }
+    }
+
+    @Test
+    void testNewWorkbookWithBufferedTempFilePackageParts() throws Exception {
+        try(UnsynchronizedByteArrayOutputStream bos = new UnsynchronizedByteArrayOutputStream()) {
+            assertFalse(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts defaults to false?");
+            assertFalse(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts defaults to false?");
+            ZipPackage.setUseTempFilePackageParts(true);
+            ZipPackage.setBufferTempFilePackageParts(true);
+            assertTrue(ZipPackage.useTempFilePackageParts(), "useTempFilePackageParts was modified?");
+            assertFalse(ZipPackage.encryptTempFilePackageParts(), "encryptTempFilePackageParts defaults to false?");
+            assertTrue(ZipPackage.bufferTempFilePackageParts(), "bufferTempFilePackageParts was modified?");
+            try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+                XSSFSheet sheet = workbook.createSheet("sheet1");
+                XSSFRow row = sheet.createRow(0);
+                XSSFCell cell0 = row.createCell(0);
+                cell0.setCellValue("");
+                XSSFCell cell1 = row.createCell(1);
+                cell1.setCellErrorValue(FormulaError.DIV0);
+                XSSFCell cell2 = row.createCell(2);
+                cell2.setCellErrorValue(FormulaError.FUNCTION_NOT_IMPLEMENTED);
+                workbook.write(bos);
+            } finally {
+                ZipPackage.setUseTempFilePackageParts(false);
+                ZipPackage.setBufferTempFilePackageParts(false);
             }
         }
     }
