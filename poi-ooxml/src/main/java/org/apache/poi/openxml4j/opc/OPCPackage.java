@@ -475,7 +475,7 @@ public abstract class OPCPackage implements RelationshipSource, Closeable {
 
         if (this.originalPackagePath != null) {
             if (!Files.exists(originalPackagePath)
-                    && Files.isSameFile(originalPackagePath.toAbsolutePath(), originalPackagePath)) {
+                    || !Files.isSameFile(originalPackagePath.toAbsolutePath(), originalPackagePath)) {
                 // Case of a package created from scratch
                 save(originalPackagePath);
             } else {
