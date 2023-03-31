@@ -52,7 +52,6 @@ import org.apache.poi.openxml4j.util.ZipEntrySource;
 import org.apache.poi.openxml4j.util.ZipFileZipEntrySource;
 import org.apache.poi.openxml4j.util.ZipInputStreamZipEntrySource;
 import org.apache.poi.util.IOUtils;
-import org.apache.poi.util.TempFile;
 
 /**
  * Physical zip package.
@@ -62,6 +61,7 @@ public final class ZipPackage extends OPCPackage {
     private static final String SETTINGS_XML = "settings.xml";
     private static boolean useTempFilePackageParts = false;
     private static boolean encryptTempFilePackageParts = false;
+    private static Path tempDirectory = null;
 
     private static final Logger LOG = LogManager.getLogger(ZipPackage.class);
 
@@ -86,6 +86,13 @@ public final class ZipPackage extends OPCPackage {
     }
 
     /**
+     * @param tempDir location of customizable temp directory where temporary copies are written
+     */
+    public static void setTempDirectory(Path tempDir) {
+        tempDirectory = tempDir;
+    }
+
+    /**
      * @return whether package part data is stored in temp files to save memory
      */
     public static boolean useTempFilePackageParts() {
@@ -97,6 +104,13 @@ public final class ZipPackage extends OPCPackage {
      */
     public static boolean encryptTempFilePackageParts() {
         return encryptTempFilePackageParts;
+    }
+
+    /**
+     * @return location of customizable temp directory where temporary copies are written
+     */
+    public static Path getTempDirectory() {
+        return tempDirectory;
     }
 
     /**
@@ -489,6 +503,7 @@ public final class ZipPackage extends OPCPackage {
         boolean success = false;
         try {
             save(tempFile);
+            LOG.atTrace().log("Created temporary ZipPackage at {}", tempFile.toAbsolutePath());
             success = true;
         } finally {
             // Close the current zip file, so we can overwrite it on all platforms
@@ -511,7 +526,12 @@ public final class ZipPackage extends OPCPackage {
      * @return Path to a temporary file
      */
     private synchronized Path generateTempPath() throws IOException {
-        return File.createTempFile("OpenXML4J" + System.nanoTime(), ".tmp").toPath();
+        String filename = "OpenXML4J" + System.nanoTime();
+        String extension = ".tmp";
+        if (tempDirectory != null) {
+            return Files.createTempFile(tempDirectory, filename, extension);
+        }
+        return Files.createTempFile(filename, extension);
     }
 
     /**
